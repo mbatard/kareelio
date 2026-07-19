@@ -23,6 +23,14 @@ spec:
         fsGroup: 101
         seccompProfile:
           type: RuntimeDefault
+      volumes:
+        - name: nginx-cache
+          emptyDir: {}
+        - name: nginx-run
+          emptyDir: {}
+        - name: nginx-tmp
+          emptyDir: {}
+
       containers:
         - name: frontend
           image: ghcr.io/mbatard/kareelio-frontend:1.0.0
@@ -53,3 +61,10 @@ spec:
             capabilities:
               drop:
                 - ALL
+          volumeMounts:
+            - name: nginx-cache
+              mountPath: /var/cache/nginx
+            - name: nginx-run
+              mountPath: /var/run
+            - name: nginx-tmp
+              mountPath: /tmp
