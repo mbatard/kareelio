@@ -1,9 +1,9 @@
 module github.com/user/kareelio/backend
 
-go 1.22
+go 1.23
 
 require (
-	github.com/go-chi/chi/v5 v5.1.0
+	github.com/go-chi/chi/v5 v5.3.1
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.7.1
 	github.com/rs/xid v1.5.0
