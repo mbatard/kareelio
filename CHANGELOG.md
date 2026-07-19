@@ -68,3 +68,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CSRF protection now fails closed (rejects requests without Origin or Referer)
 - `UpdateUserRequest` no longer accepts `role` field (role escalation prevented)
 - K8s images pinned to `ghcr.io/mbatard/kareelio-*` instead of `kareelio/*`
+- Session cookie `Secure` is now always `true` (removed `SESSION_COOKIE_SECURE` env var)
+- Logout cookie now also includes `Secure: true` and `SameSite: Strict`
+
+### Removed
+
+- `SessionCookieSecure` from `Config` struct (always `true`)
+- `SESSION_COOKIE_SECURE` env var from `.env.example` and K8s ConfigMap

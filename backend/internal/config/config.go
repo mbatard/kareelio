@@ -13,7 +13,6 @@ type Config struct {
 	PostgresUser        string
 	PostgresPassword    string
 	SessionSecret       string
-	SessionCookieSecure bool
 	SessionCookieSameSite string
 	SessionDurationHours int
 	DefaultAdminEmail   string
@@ -31,7 +30,6 @@ func Load() *Config {
 		PostgresUser:        getEnv("POSTGRES_USER", "kareelio"),
 		PostgresPassword:    getEnv("POSTGRES_PASSWORD", "changeme"),
 		SessionSecret:       getEnv("SESSION_SECRET", "dev-secret-change-in-production"),
-		SessionCookieSecure: getEnvBool("SESSION_COOKIE_SECURE", false),
 		SessionCookieSameSite: getEnv("SESSION_COOKIE_SAMESITE", "lax"),
 		SessionDurationHours: getEnvInt("SESSION_DURATION_HOURS", 72),
 		DefaultAdminEmail:   getEnv("DEFAULT_ADMIN_EMAIL", "admin@kareelio.local"),
