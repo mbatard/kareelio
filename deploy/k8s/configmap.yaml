@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kareelio-config
+  namespace: kareelio
+data:
+  POSTGRES_HOST: "postgres"
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: "kareelio"
+  SERVER_PORT: "8080"
+  SESSION_COOKIE_SECURE: "true"
+  SESSION_COOKIE_SAMESITE: "strict"
+  SESSION_DURATION_HOURS: "72"
+  DB_MIGRATE: "true"
+  CORS_ORIGIN: "https://kareelio.example.com"

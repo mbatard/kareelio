@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kareelio
+  labels:
+    app.kubernetes.io/name: kareelio
+    app.kubernetes.io/part-of: kareelio

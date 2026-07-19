@@ -1,0 +1,55 @@
+# Kareelio binary (opencode launcher)
+kareelio
+
+# Local helper scripts
+/opencode
+/run
+
+# Go
+backend/tmp/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+backend/kareelio-server
+coverage.out
+coverage.html
+
+# Node / Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+*.tsbuildinfo
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose.override.yml
+
+# Kubernetes secrets (never commit real secrets)
+deploy/k8s/secret.yaml
+
+# Semantic-release
+node_modules/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test
+backend/test/data/
