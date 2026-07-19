@@ -33,7 +33,7 @@
     "eslint": "^8.57.0",
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-refresh": "^0.4.0",
-    "jsdom": "^25.0.0",
+    "jsdom": "^29.1.1",
     "postcss": "^8.5.19",
     "tailwindcss": "^4.3.2",
     "typescript": "^5.5.0",
