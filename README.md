@@ -1,5 +1,10 @@
 # Kareelio
 
+[![CI](https://github.com/mbatard/kareelio/actions/workflows/ci.yml/badge.svg)](https://github.com/mbatard/kareelio/actions/workflows/ci.yml)
+[![Docker](https://github.com/mbatard/kareelio/actions/workflows/docker.yml/badge.svg)](https://github.com/mbatard/kareelio/actions/workflows/docker.yml)
+[![CodeQL](https://github.com/mbatard/kareelio/actions/workflows/codeql.yml/badge.svg)](https://github.com/mbatard/kareelio/actions/workflows/codeql.yml)
+[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE)
+
 Job application tracker — manage your job search in one place.
 
 ## Stack
@@ -147,7 +152,7 @@ make lint
 
 ## Kubernetes Deployment
 
-Manifests are in `deploy/k8s/`. Security-hardened with `runAsNonRoot`, `readOnlyRootFilesystem`, `drop ALL` capabilities, `automountServiceAccountToken: false`, CiliumNetworkPolicy (deny-all + explicit allow), and Traefik ingress with HSTS + rate limiting via Middleware CRDs.
+Manifests are in `deploy/k8s/`. Security-hardened with `runAsNonRoot`, `readOnlyRootFilesystem`, `drop ALL` capabilities, `automountServiceAccountToken: false`, CiliumNetworkPolicy (deny-all + explicit allow), and Traefik IngressRoute with HSTS + rate limiting via Middleware CRDs.
 
 ```bash
 cd deploy/k8s
@@ -168,10 +173,31 @@ kubectl apply -f frontend-service.yaml
 kubectl apply -f ingress.yaml
 ```
 
+## Docker Images
+
+Images are published to GitHub Container Registry on every push to `main` and on version tags.
+
+| Image | GHCR |
+|-------|------|
+| Backend | `ghcr.io/mbatard/kareelio-backend` |
+| Frontend | `ghcr.io/mbatard/kareelio-frontend` |
+
+Pull:
+
+```bash
+docker pull ghcr.io/mbatard/kareelio-backend:main
+docker pull ghcr.io/mbatard/kareelio-frontend:main
+```
+
 ## Project Structure
 
 ```
 kareelio/
+├── .github/                    # CI/CD workflows, Dependabot
+│   └── workflows/
+│       ├── ci.yml              # Go tests + frontend build
+│       ├── docker.yml          # Docker build + GHCR push
+│       └── codeql.yml          # Security analysis
 ├── backend/                    # Go API
 │   ├── cmd/server/             # Entry point
 │   ├── internal/
@@ -235,7 +261,7 @@ kareelio/
 - **Security headers**: CSP, HSTS, X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy
 - **K8s**: `runAsNonRoot`, `readOnlyRootFilesystem`, `drop ALL` capabilities, `automountServiceAccountToken: false`
 - **K8s CiliumNetworkPolicy**: default deny-all, explicit allow for Traefik→frontend→backend→postgres
-- **K8s Ingress**: Traefik with HSTS, rate limiting, security headers via Middleware CRDs
+- **K8s IngressRoute**: Traefik with HSTS, rate limiting, security headers via Middleware CRDs
 - **Image pinning**: specific version tags (no `latest` in K8s manifests)
 - **Panic recovery**: middleware catches panics, returns 500
 - **Request timeouts**: 30s timeout per request

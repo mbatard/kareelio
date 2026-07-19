@@ -40,7 +40,7 @@ func CSRFProtection(allowedOrigins string) func(http.Handler) http.Handler {
 				return
 			}
 
-			next.ServeHTTP(w, r)
+			http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
 		})
 	}
 }

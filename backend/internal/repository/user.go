@@ -85,11 +85,6 @@ func (r *UserRepository) Update(ctx context.Context, id string, req model.Update
 		args = append(args, *req.Description)
 		argIdx++
 	}
-	if req.Role != nil {
-		sets = append(sets, fmt.Sprintf("role = $%d", argIdx))
-		args = append(args, *req.Role)
-		argIdx++
-	}
 	if req.IsActive != nil {
 		sets = append(sets, fmt.Sprintf("is_active = $%d", argIdx))
 		args = append(args, *req.IsActive)

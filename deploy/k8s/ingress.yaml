@@ -1,32 +1,29 @@
-apiVersion: networking.k8s.io/v1
-kind: Ingress
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
 metadata:
-  name: kareelio-ingress
+  name: kareelio-ingressroute
   namespace: kareelio
-  annotations:
-    traefik.ingress.kubernetes.io/router.entrypoints: websecure
-    traefik.ingress.kubernetes.io/router.middlewares: kareelio-security-headers@kubernetescrd,kareelio-rate-limit@kubernetescrd
 spec:
-  ingressClassName: traefik
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`kareelio.example.com`) && PathPrefix(`/api`)
+      kind: Rule
+      priority: 100
+      middlewares:
+        - name: security-headers
+        - name: rate-limit
+      services:
+        - name: backend
+          port: 8080
+    - match: Host(`kareelio.example.com`) && PathPrefix(`/`)
+      kind: Rule
+      priority: 1
+      middlewares:
+        - name: security-headers
+        - name: rate-limit
+      services:
+        - name: frontend
+          port: 80
   tls:
-    - hosts:
-        - kareelio.example.com
-      secretName: kareelio-tls
-  rules:
-    - host: kareelio.example.com
-      http:
-        paths:
-          - path: /api
-            pathType: Prefix
-            backend:
-              service:
-                name: backend
-                port:
-                  number: 8080
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: frontend
-                port:
-                  number: 80
+    secretName: kareelio-tls

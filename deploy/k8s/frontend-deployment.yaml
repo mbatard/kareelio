@@ -25,7 +25,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: frontend
-          image: kareelio/frontend:1.0.0
+          image: ghcr.io/mbatard/kareelio-frontend:1.0.0
           ports:
             - containerPort: 80
           readinessProbe:

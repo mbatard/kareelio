@@ -45,17 +45,19 @@ spec:
                 secretKeyRef:
                   name: kareelio-secret
                   key: POSTGRES_PASSWORD
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
           volumeMounts:
             - name: pgdata
               mountPath: /var/lib/postgresql/data
           readinessProbe:
             exec:
-              command: ["pg_isready", "-U", "kareelio"]
+              command: ["pg_isready", "-h", "127.0.0.1", "-U", "kareelio"]
             initialDelaySeconds: 5
             periodSeconds: 5
           livenessProbe:
             exec:
-              command: ["pg_isready", "-U", "kareelio"]
+              command: ["pg_isready", "-h", "127.0.0.1", "-U", "kareelio"]
             initialDelaySeconds: 15
             periodSeconds: 10
           resources:

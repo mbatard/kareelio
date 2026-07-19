@@ -50,10 +50,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Session revocation on admin password reset (all sessions for the user are deleted)
 - Kubernetes security contexts (`runAsNonRoot`, `readOnlyRootFilesystem`, `drop ALL` capabilities, `automountServiceAccountToken: false`)
 - CiliumNetworkPolicy (default deny-all, explicit allow for Traefik→frontend→backend→postgres)
-- Traefik ingress with HSTS, rate limiting, security headers via Middleware CRDs
+- Traefik IngressRoute with HSTS, rate limiting, security headers via Middleware CRDs
 - Traefik Middleware manifests (`security-headers`, `rate-limit`)
 - Kubernetes image pinning (version tags, no `latest`)
 - Nginx security headers for local dev (CSP, HSTS, Permissions-Policy, dotfile blocking)
+- GitHub Actions CI (Go tests + frontend build + npm audit)
+- GitHub Actions Docker build + push to GHCR (`ghcr.io/mbatard/kareelio-backend`, `ghcr.io/mbatard/kareelio-frontend`)
+- GitHub CodeQL analysis (Go + JavaScript/TypeScript)
+- Dependabot configuration (Go modules, npm, Docker, GitHub Actions)
 
 ### Changed
 
@@ -61,3 +65,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `UserHandler` now accepts `*repository.SessionRepository` for session revocation on password reset
 - CSV import uses strict CSV parsing (`LazyQuotes` disabled)
 - CSV import returns detailed row-level validation errors
+- CSRF protection now fails closed (rejects requests without Origin or Referer)
+- `UpdateUserRequest` no longer accepts `role` field (role escalation prevented)
+- K8s images pinned to `ghcr.io/mbatard/kareelio-*` instead of `kareelio/*`

@@ -34,7 +34,6 @@ type UpdateUserRequest struct {
 	Email       *string `json:"email,omitempty"`
 	DisplayName *string `json:"display_name,omitempty"`
 	Description *string `json:"description,omitempty"`
-	Role        *UserRole `json:"role,omitempty"`
 	IsActive    *bool   `json:"is_active,omitempty"`
 }
 

@@ -36,7 +36,6 @@ export interface UpdateUserRequest {
   email?: string;
   display_name?: string;
   description?: string;
-  role?: 'admin' | 'user';
   is_active?: boolean;
 }
 
