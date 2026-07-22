@@ -11,9 +11,10 @@ type AdminDashboard struct {
 }
 
 type AdminDashboardUsers struct {
-	Total    int `json:"total"`
-	Active   int `json:"active"`
-	Disabled int `json:"disabled"`
+	Total     int `json:"total"`
+	Active    int `json:"active"`
+	Unverified int `json:"unverified"`
+	Disabled  int `json:"disabled"`
 }
 
 type AdminDashboardApplications struct {

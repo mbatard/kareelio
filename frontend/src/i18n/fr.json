@@ -163,6 +163,7 @@
       "users": "Utilisateurs",
       "totalUsers": "Total utilisateurs",
       "activeUsers": "Actifs",
+      "unverifiedUsers": "Email non vérifié",
       "disabledUsers": "Désactivés",
       "applications": "Candidatures",
       "totalApps": "Total",
@@ -184,7 +185,10 @@
       "protectedUser": "L'utilisateur admin ne peut pas être modifié.",
       "changePassword": "Changer le mot de passe",
       "newPassword": "Nouveau mot de passe",
-      "confirmPassword": "Confirmer le mot de passe"
+      "confirmPassword": "Confirmer le mot de passe",
+      "emailVerified": "Vérification email",
+      "verified": "Vérifié",
+      "pending": "En attente"
     },
     "about": {
       "title": "À propos",
@@ -251,7 +255,10 @@
         "job_applications_imported": "Candidatures importées",
         "profile_updated": "Profil mis à jour",
         "password_changed": "Mot de passe modifié",
-        "user_password_changed": "Mot de passe réinitialisé par admin"
+        "user_password_changed": "Mot de passe réinitialisé par admin",
+        "user_registered": "Inscription utilisateur",
+        "email_verified": "Email vérifié",
+        "email_verification_resent": "Email de vérification renvoyé"
       },
       "targetTypes": {
         "user": "Utilisateur",

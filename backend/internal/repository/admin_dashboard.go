@@ -29,11 +29,17 @@ func (r *AdminDashboardRepository) GetDashboard(ctx context.Context) (*model.Adm
 		return nil, fmt.Errorf("users total: %w", err)
 	}
 
-	err = r.db.QueryRow(ctx, `SELECT COUNT(*) FROM users WHERE role = 'user' AND is_active = true`).Scan(&dash.Users.Active)
+	err = r.db.QueryRow(ctx, `SELECT COUNT(*) FROM users WHERE role = 'user' AND is_active = true AND email_verified_at IS NOT NULL`).Scan(&dash.Users.Active)
 	if err != nil {
 		return nil, fmt.Errorf("users active: %w", err)
 	}
-	dash.Users.Disabled = dash.Users.Total - dash.Users.Active
+
+	err = r.db.QueryRow(ctx, `SELECT COUNT(*) FROM users WHERE role = 'user' AND email_verified_at IS NULL`).Scan(&dash.Users.Unverified)
+	if err != nil {
+		return nil, fmt.Errorf("users unverified: %w", err)
+	}
+
+	dash.Users.Disabled = dash.Users.Total - dash.Users.Active - dash.Users.Unverified
 
 	err = r.db.QueryRow(ctx, `SELECT COUNT(*) FROM job_applications`).Scan(&dash.Applications.Total)
 	if err != nil {

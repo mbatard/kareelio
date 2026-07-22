@@ -163,6 +163,7 @@
       "users": "Users",
       "totalUsers": "Total Users",
       "activeUsers": "Active",
+      "unverifiedUsers": "Email Unverified",
       "disabledUsers": "Disabled",
       "applications": "Applications",
       "totalApps": "Total",
@@ -184,7 +185,10 @@
       "protectedUser": "Admin user cannot be modified.",
       "changePassword": "Change Password",
       "newPassword": "New Password",
-      "confirmPassword": "Confirm Password"
+      "confirmPassword": "Confirm Password",
+      "emailVerified": "Email Verified",
+      "verified": "Verified",
+      "pending": "Pending"
     },
     "about": {
       "title": "About",
@@ -251,7 +255,10 @@
         "job_applications_imported": "Applications Imported",
         "profile_updated": "Profile Updated",
         "password_changed": "Password Changed",
-        "user_password_changed": "Password reset by admin"
+        "user_password_changed": "Password reset by admin",
+        "user_registered": "User Registered",
+        "email_verified": "Email Verified",
+        "email_verification_resent": "Verification Email Resent"
       },
       "targetTypes": {
         "user": "User",

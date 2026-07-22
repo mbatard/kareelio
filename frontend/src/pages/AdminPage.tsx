@@ -34,8 +34,8 @@ export function AdminPage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <KpiCard label={t('admin.totalUsers')}  value={dash.users.total}  accent="text-blue-600 dark:text-blue-400" />
         <KpiCard label={t('admin.activeUsers')} value={dash.users.active} accent="text-green-600 dark:text-green-400" />
+        <KpiCard label={t('admin.unverifiedUsers')} value={dash.users.unverified} accent="text-yellow-600 dark:text-yellow-400" />
         <KpiCard label={t('admin.disabledUsers')} value={dash.users.disabled} accent="text-red-600 dark:text-red-400" />
-        <KpiCard label={t('admin.avgPerUser')} value={dash.applications.average_per_active_user.toFixed(1)} accent="text-purple-600 dark:text-purple-400" />
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

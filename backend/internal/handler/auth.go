@@ -58,7 +58,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !user.IsActive {
+	if user.EmailVerifiedAt == nil {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "account not verified", "code": "email_not_verified"})
 		return
 	}
@@ -204,11 +204,6 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.userRepo.Deactivate(r.Context(), user.ID); err != nil {
-		writeJSON(w, http.StatusOK, map[string]string{"message": "if the email can be registered, a verification email has been sent"})
-		return
-	}
-
 	token, tokenHash, err := generateVerificationToken()
 	if err != nil {
 		writeJSON(w, http.StatusOK, map[string]string{"message": "if the email can be registered, a verification email has been sent"})
@@ -263,7 +258,7 @@ func (h *AuthHandler) VerifyEmail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.userRepo.Activate(r.Context(), userID); err != nil {
+	if err := h.userRepo.SetEmailVerified(r.Context(), userID); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "unable to activate account"})
 		return
 	}
@@ -300,7 +295,7 @@ func (h *AuthHandler) ResendVerification(w http.ResponseWriter, r *http.Request)
 	}
 
 	user, err := h.userRepo.GetByEmail(r.Context(), req.Email)
-	if err != nil || user.IsActive {
+	if err != nil || user.EmailVerifiedAt != nil {
 		writeJSON(w, http.StatusOK, map[string]string{"message": "if the email is registered and unverified, a verification email has been sent"})
 		return
 	}
@@ -320,6 +315,16 @@ func (h *AuthHandler) ResendVerification(w http.ResponseWriter, r *http.Request)
 	}
 
 	_ = h.mailer.SendVerificationEmail(user.Email, token)
+
+	_ = h.auditRepo.Log(r.Context(), &model.AuditEvent{
+		ActorUserID: &user.ID,
+		ActorEmail:  user.Email,
+		ActorRole:   string(user.Role),
+		ActorIP:     middleware.ClientIP(r),
+		Action:      model.AuditActionEmailVerificationResent,
+		TargetType:  "user",
+		TargetID:    user.ID,
+	})
 
 	writeJSON(w, http.StatusOK, map[string]string{"message": "if the email is registered and unverified, a verification email has been sent"})
 }

@@ -74,8 +74,8 @@ func SeedAdmin(ctx context.Context, pool *pgxpool.Pool, email, passwordHash stri
 	}
 
 	_, err = pool.Exec(ctx,
-		`INSERT INTO users (email, display_name, password_hash, role, is_active, language, theme)
-		 VALUES ($1, 'Admin', $2, 'admin', true, 'system', 'system')
+		`INSERT INTO users (email, display_name, password_hash, role, is_active, email_verified_at, language, theme)
+		 VALUES ($1, 'Admin', $2, 'admin', true, NOW(), 'system', 'system')
 		 ON CONFLICT (email) DO NOTHING`,
 		email, passwordHash,
 	)

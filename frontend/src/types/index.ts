@@ -5,6 +5,7 @@ export interface User {
   description: string;
   role: 'admin' | 'user';
   is_active: boolean;
+  email_verified_at: string | null;
   language: 'fr' | 'en' | 'system';
   theme: 'light' | 'dark' | 'system';
   created_at: string;
@@ -95,7 +96,7 @@ export interface AboutInfo {
 }
 
 export interface AdminDashboard {
-  users: { total: number; active: number; disabled: number };
+  users: { total: number; active: number; unverified: number; disabled: number };
   applications: { total: number; created_last_7_days: number; created_last_30_days: number; average_per_active_user: number };
   funnels: { response_rate: number; interview_rate: number; test_rate: number; offer_rate: number };
   by_status: Record<string, number>;

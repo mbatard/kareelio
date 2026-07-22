@@ -27,9 +27,9 @@ func (r *UserRepository) Create(ctx context.Context, req model.CreateUserRequest
 	err = r.db.QueryRow(ctx,
 		`INSERT INTO users (email, display_name, description, password_hash, role, is_active, language, theme)
 		 VALUES ($1, $2, $3, $4, $5, true, 'system', 'system')
-		 RETURNING id, email, display_name, description, role, is_active, language, theme, created_at, updated_at`,
+		 RETURNING id, email, display_name, description, role, is_active, email_verified_at, language, theme, created_at, updated_at`,
 		req.Email, req.DisplayName, req.Description, string(hash), role,
-	).Scan(&user.ID, &user.Email, &user.DisplayName, &user.Description, &user.Role, &user.IsActive, &user.Language, &user.Theme, &user.CreatedAt, &user.UpdatedAt)
+	).Scan(&user.ID, &user.Email, &user.DisplayName, &user.Description, &user.Role, &user.IsActive, &user.EmailVerifiedAt, &user.Language, &user.Theme, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create user: %w", err)
 	}
@@ -40,10 +40,10 @@ func (r *UserRepository) Create(ctx context.Context, req model.CreateUserRequest
 func (r *UserRepository) GetByID(ctx context.Context, id string) (*model.User, error) {
 	var user model.User
 	err := r.db.QueryRow(ctx,
-		`SELECT id, email, display_name, description, role, is_active, language, theme, password_hash, created_at, updated_at
+		`SELECT id, email, display_name, description, role, is_active, email_verified_at, language, theme, password_hash, created_at, updated_at
 		 FROM users WHERE id = $1`,
 		id,
-	).Scan(&user.ID, &user.Email, &user.DisplayName, &user.Description, &user.Role, &user.IsActive, &user.Language, &user.Theme, &user.PasswordHash, &user.CreatedAt, &user.UpdatedAt)
+	).Scan(&user.ID, &user.Email, &user.DisplayName, &user.Description, &user.Role, &user.IsActive, &user.EmailVerifiedAt, &user.Language, &user.Theme, &user.PasswordHash, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("user not found: %w", err)
 	}
@@ -54,10 +54,10 @@ func (r *UserRepository) GetByID(ctx context.Context, id string) (*model.User, e
 func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*model.User, error) {
 	var user model.User
 	err := r.db.QueryRow(ctx,
-		`SELECT id, email, display_name, description, role, is_active, language, theme, password_hash, created_at, updated_at
+		`SELECT id, email, display_name, description, role, is_active, email_verified_at, language, theme, password_hash, created_at, updated_at
 		 FROM users WHERE email = $1`,
 		email,
-	).Scan(&user.ID, &user.Email, &user.DisplayName, &user.Description, &user.Role, &user.IsActive, &user.Language, &user.Theme, &user.PasswordHash, &user.CreatedAt, &user.UpdatedAt)
+	).Scan(&user.ID, &user.Email, &user.DisplayName, &user.Description, &user.Role, &user.IsActive, &user.EmailVerifiedAt, &user.Language, &user.Theme, &user.PasswordHash, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("user not found: %w", err)
 	}
@@ -97,12 +97,12 @@ func (r *UserRepository) Update(ctx context.Context, id string, req model.Update
 
 	sets = append(sets, "updated_at = NOW()")
 
-	query := fmt.Sprintf("UPDATE users SET %s WHERE id = $%d RETURNING id, email, display_name, description, role, is_active, language, theme, created_at, updated_at",
+	query := fmt.Sprintf("UPDATE users SET %s WHERE id = $%d RETURNING id, email, display_name, description, role, is_active, email_verified_at, language, theme, created_at, updated_at",
 		joinStrings(sets, ", "), argIdx)
 	args = append(args, id)
 
 	var user model.User
-	err := r.db.QueryRow(ctx, query, args...).Scan(&user.ID, &user.Email, &user.DisplayName, &user.Description, &user.Role, &user.IsActive, &user.Language, &user.Theme, &user.CreatedAt, &user.UpdatedAt)
+	err := r.db.QueryRow(ctx, query, args...).Scan(&user.ID, &user.Email, &user.DisplayName, &user.Description, &user.Role, &user.IsActive, &user.EmailVerifiedAt, &user.Language, &user.Theme, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("unable to update user: %w", err)
 	}
@@ -156,12 +156,12 @@ func (r *UserRepository) UpdateProfile(ctx context.Context, id string, req model
 
 	sets = append(sets, "updated_at = NOW()")
 
-	query := fmt.Sprintf("UPDATE users SET %s WHERE id = $%d RETURNING id, email, display_name, description, role, is_active, language, theme, created_at, updated_at",
+	query := fmt.Sprintf("UPDATE users SET %s WHERE id = $%d RETURNING id, email, display_name, description, role, is_active, email_verified_at, language, theme, created_at, updated_at",
 		joinStrings(sets, ", "), argIdx)
 	args = append(args, id)
 
 	var user model.User
-	err := r.db.QueryRow(ctx, query, args...).Scan(&user.ID, &user.Email, &user.DisplayName, &user.Description, &user.Role, &user.IsActive, &user.Language, &user.Theme, &user.CreatedAt, &user.UpdatedAt)
+	err := r.db.QueryRow(ctx, query, args...).Scan(&user.ID, &user.Email, &user.DisplayName, &user.Description, &user.Role, &user.IsActive, &user.EmailVerifiedAt, &user.Language, &user.Theme, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("unable to update profile: %w", err)
 	}
@@ -181,7 +181,7 @@ func (r *UserRepository) UpdatePassword(ctx context.Context, id string, password
 
 func (r *UserRepository) List(ctx context.Context) ([]model.User, error) {
 	rows, err := r.db.Query(ctx,
-		`SELECT id, email, display_name, description, role, is_active, language, theme, created_at, updated_at
+		`SELECT id, email, display_name, description, role, is_active, email_verified_at, language, theme, created_at, updated_at
 		 FROM users ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, fmt.Errorf("unable to list users: %w", err)
@@ -191,7 +191,7 @@ func (r *UserRepository) List(ctx context.Context) ([]model.User, error) {
 	var users []model.User
 	for rows.Next() {
 		var u model.User
-		if err := rows.Scan(&u.ID, &u.Email, &u.DisplayName, &u.Description, &u.Role, &u.IsActive, &u.Language, &u.Theme, &u.CreatedAt, &u.UpdatedAt); err != nil {
+		if err := rows.Scan(&u.ID, &u.Email, &u.DisplayName, &u.Description, &u.Role, &u.IsActive, &u.EmailVerifiedAt, &u.Language, &u.Theme, &u.CreatedAt, &u.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("unable to scan user: %w", err)
 		}
 		users = append(users, u)
@@ -218,6 +218,11 @@ func (r *UserRepository) Activate(ctx context.Context, id string) error {
 
 func (r *UserRepository) Deactivate(ctx context.Context, id string) error {
 	_, err := r.db.Exec(ctx, "UPDATE users SET is_active = false, updated_at = NOW() WHERE id = $1", id)
+	return err
+}
+
+func (r *UserRepository) SetEmailVerified(ctx context.Context, id string) error {
+	_, err := r.db.Exec(ctx, "UPDATE users SET email_verified_at = NOW(), updated_at = NOW() WHERE id = $1 AND email_verified_at IS NULL", id)
 	return err
 }
 

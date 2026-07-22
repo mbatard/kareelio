@@ -37,4 +37,5 @@ const (
 	AuditActionJobAppsImported    = "job_applications_imported"
 	AuditActionUserRegistered     = "user_registered"
 	AuditActionEmailVerified      = "email_verified"
+	AuditActionEmailVerificationResent = "email_verification_resent"
 )
