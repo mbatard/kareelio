@@ -8,6 +8,7 @@ import (
 
 	"github.com/user/kareelio/backend/internal/config"
 	"github.com/user/kareelio/backend/internal/handler"
+	"github.com/user/kareelio/backend/internal/mailer"
 	"github.com/user/kareelio/backend/internal/middleware"
 	"github.com/user/kareelio/backend/internal/model"
 	"github.com/user/kareelio/backend/internal/repository"
@@ -19,8 +20,11 @@ func New(db *pgxpool.Pool, cfg *config.Config) *chi.Mux {
 	jaRepo := repository.NewJobApplicationRepository(db)
 	adminDashRepo := repository.NewAdminDashboardRepository(db)
 	auditRepo := repository.NewAuditRepository(db)
+	evRepo := repository.NewEmailVerificationRepository(db)
 
-	authHandler := handler.NewAuthHandler(userRepo, sessionRepo, auditRepo, cfg)
+	m := mailer.New(cfg)
+
+	authHandler := handler.NewAuthHandler(userRepo, sessionRepo, auditRepo, evRepo, m, cfg)
 	userHandler := handler.NewUserHandler(userRepo, sessionRepo, auditRepo)
 	profileHandler := handler.NewProfileHandler(userRepo, auditRepo)
 	jaHandler := handler.NewJobApplicationHandler(jaRepo, auditRepo)
@@ -46,6 +50,9 @@ func New(db *pgxpool.Pool, cfg *config.Config) *chi.Mux {
 	r.Get("/api/readyz", healthHandler.Readyz)
 
 	r.With(rateLimiter.Limit(10, 1*time.Minute)).Post("/api/auth/login", authHandler.Login)
+	r.With(rateLimiter.Limit(5, 1*time.Minute)).Post("/api/auth/register", authHandler.Register)
+	r.With(rateLimiter.Limit(10, 1*time.Minute)).Post("/api/auth/verify-email", authHandler.VerifyEmail)
+	r.With(rateLimiter.Limit(5, 1*time.Minute)).Post("/api/auth/resend-verification", authHandler.ResendVerification)
 
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.Auth(sessionRepo, userRepo))

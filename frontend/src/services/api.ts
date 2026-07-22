@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { User, LoginRequest, UpdateProfileRequest, CreateUserRequest, UpdateUserRequest, JobApplication, CreateJobApplicationRequest, UpdateJobApplicationRequest, AboutInfo, AdminDashboard, AuditListResponse } from '../types';
+import type { User, LoginRequest, RegisterRequest, UpdateProfileRequest, CreateUserRequest, UpdateUserRequest, JobApplication, CreateJobApplicationRequest, UpdateJobApplicationRequest, AboutInfo, AdminDashboard, AuditListResponse } from '../types';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '',
@@ -19,6 +19,18 @@ api.interceptors.response.use(
 export const authApi = {
   login: async (data: LoginRequest): Promise<{ user: User }> => {
     const res = await api.post('/api/auth/login', data);
+    return res.data;
+  },
+  register: async (data: RegisterRequest): Promise<{ message: string }> => {
+    const res = await api.post('/api/auth/register', data);
+    return res.data;
+  },
+  verifyEmail: async (token: string): Promise<{ message: string }> => {
+    const res = await api.post('/api/auth/verify-email', { token });
+    return res.data;
+  },
+  resendVerification: async (email: string): Promise<{ message: string }> => {
+    const res = await api.post('/api/auth/resend-verification', { email });
     return res.data;
   },
   logout: async (): Promise<void> => {

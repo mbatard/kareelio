@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -19,8 +19,12 @@ export function LoginPage() {
     try {
       await login(email, password);
       navigate('/');
-    } catch {
-      setError(t('auth.loginError'));
+    } catch (err: any) {
+      if (err?.response?.status === 403 && err?.response?.data?.code === 'email_not_verified') {
+        setError(t('auth.emailNotVerified'));
+      } else {
+        setError(t('auth.loginError'));
+      }
     } finally {
       setLoading(false);
     }
@@ -66,6 +70,12 @@ export function LoginPage() {
             {loading ? t('common.loading') : t('auth.loginButton')}
           </button>
         </form>
+        <p className="mt-4 text-center text-sm text-gray-600 dark:text-gray-400">
+          {t('auth.noAccount')}{' '}
+          <Link to="/register" className="text-blue-600 hover:text-blue-500 dark:text-blue-400">
+            {t('auth.register')}
+          </Link>
+        </p>
       </div>
     </div>
   );

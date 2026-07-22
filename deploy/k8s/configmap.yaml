@@ -12,3 +12,8 @@ data:
   SESSION_DURATION_HOURS: "72"
   DB_MIGRATE: "true"
   CORS_ORIGIN: "https://kareelio.example.com"
+  APP_PUBLIC_URL: "https://app.kareelio.fr"
+  REGISTRATION_ENABLED: "true"
+  VERIFICATION_TOKEN_TTL_HOURS: "24"
+  SMTP_PORT: "587"
+  SMTP_FROM: "noreply@kareelio.fr"

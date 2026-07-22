@@ -31,13 +31,20 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-kareelio}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
       SESSION_SECRET: ${SESSION_SECRET:-dev-secret-change-in-production}
-      SESSION_COOKIE_SECURE: "false"
       SESSION_COOKIE_SAMESITE: "lax"
       SESSION_DURATION_HOURS: "72"
       DEFAULT_ADMIN_EMAIL: ${DEFAULT_ADMIN_EMAIL:-admin@kareelio.local}
       DEFAULT_ADMIN_PASSWORD: ${DEFAULT_ADMIN_PASSWORD:-admin}
       CORS_ORIGIN: http://localhost:5173
       DB_MIGRATE: "true"
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-http://localhost:5173}
+      REGISTRATION_ENABLED: "true"
+      VERIFICATION_TOKEN_TTL_HOURS: "24"
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -47,7 +54,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        VITE_API_URL: http://localhost:8080
+        VITE_API_URL: /
     restart: unless-stopped
     ports:
       - "5173:80"

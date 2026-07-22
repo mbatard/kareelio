@@ -211,6 +211,16 @@ func (r *UserRepository) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
+func (r *UserRepository) Activate(ctx context.Context, id string) error {
+	_, err := r.db.Exec(ctx, "UPDATE users SET is_active = true, updated_at = NOW() WHERE id = $1", id)
+	return err
+}
+
+func (r *UserRepository) Deactivate(ctx context.Context, id string) error {
+	_, err := r.db.Exec(ctx, "UPDATE users SET is_active = false, updated_at = NOW() WHERE id = $1", id)
+	return err
+}
+
 func joinStrings(ss []string, sep string) string {
 	result := ""
 	for i, s := range ss {

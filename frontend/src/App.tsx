@@ -5,6 +5,8 @@ import { LanguageProvider } from './contexts/LanguageContext';
 import { Navbar } from './components/Navbar';
 import { ProtectedRoute, AdminRoute } from './components/ProtectedRoute';
 import { LoginPage } from './pages/LoginPage';
+import { RegisterPage } from './pages/RegisterPage';
+import { VerifyEmailPage } from './pages/VerifyEmailPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { AboutPage } from './pages/AboutPage';
@@ -31,6 +33,8 @@ function AppRoutes() {
       <Navbar />
       <Routes>
         <Route path="/login" element={user ? <Navigate to={isAdmin ? '/admin' : '/'} /> : <LoginPage />} />
+        <Route path="/register" element={user ? <Navigate to={isAdmin ? '/admin' : '/'} /> : <RegisterPage />} />
+        <Route path="/verify-email" element={<VerifyEmailPage />} />
         {!isAdmin && (
           <>
             <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />

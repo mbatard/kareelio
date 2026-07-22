@@ -32,6 +32,12 @@ export interface CreateUserRequest {
   description?: string;
 }
 
+export interface RegisterRequest {
+  email: string;
+  password: string;
+  display_name?: string;
+}
+
 export interface UpdateUserRequest {
   email?: string;
   display_name?: string;

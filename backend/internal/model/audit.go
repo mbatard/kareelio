@@ -35,4 +35,6 @@ const (
 	AuditActionAdminPasswordReset = "user_password_changed"
 	AuditActionJobAppsExported    = "job_applications_exported"
 	AuditActionJobAppsImported    = "job_applications_imported"
+	AuditActionUserRegistered     = "user_registered"
+	AuditActionEmailVerified      = "email_verified"
 )

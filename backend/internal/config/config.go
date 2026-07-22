@@ -19,6 +19,14 @@ type Config struct {
 	DefaultAdminPassword string
 	CorsOrigin          string
 	DBMigrate           bool
+	AppPublicURL        string
+	RegistrationEnabled bool
+	SMTPHost            string
+	SMTPPort            string
+	SMTPUsername         string
+	SMTPPassword        string
+	SMTPFrom            string
+	VerificationTokenTTLHours int
 }
 
 func Load() *Config {
@@ -36,6 +44,14 @@ func Load() *Config {
 		DefaultAdminPassword: getEnv("DEFAULT_ADMIN_PASSWORD", "admin"),
 		CorsOrigin:          getEnv("CORS_ORIGIN", "http://localhost:5173"),
 		DBMigrate:           getEnvBool("DB_MIGRATE", true),
+		AppPublicURL:        getEnv("APP_PUBLIC_URL", "http://localhost:5173"),
+		RegistrationEnabled: getEnvBool("REGISTRATION_ENABLED", true),
+		SMTPHost:            getEnv("SMTP_HOST", ""),
+		SMTPPort:            getEnv("SMTP_PORT", "587"),
+		SMTPUsername:         getEnv("SMTP_USERNAME", ""),
+		SMTPPassword:        getEnv("SMTP_PASSWORD", ""),
+		SMTPFrom:            getEnv("SMTP_FROM", ""),
+		VerificationTokenTTLHours: getEnvInt("VERIFICATION_TOKEN_TTL_HOURS", 24),
 	}
 }
 
