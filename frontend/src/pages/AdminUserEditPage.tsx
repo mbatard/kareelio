@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { userApi } from '../services/api';
 import { isValidEmail } from '../utils/email';
+import { PasswordStrength, isPasswordValid } from '../components/PasswordStrength';
 import type { User } from '../types';
 
 export function AdminUserEditPage() {
@@ -61,7 +62,7 @@ export function AdminUserEditPage() {
     setPasswordError('');
     setPasswordSuccess('');
 
-    if (newPassword.length < 8) {
+    if (!isPasswordValid(newPassword)) {
       setPasswordError(t('profile.passwordTooShort'));
       return;
     }
@@ -161,6 +162,7 @@ export function AdminUserEditPage() {
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('admin.newPassword')}</label>
               <input type="password" required value={newPassword} onChange={(e) => { setNewPassword(e.target.value); setPasswordError(''); setPasswordSuccess(''); }}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+              <PasswordStrength password={newPassword} />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('admin.confirmPassword')}</label>
@@ -169,7 +171,7 @@ export function AdminUserEditPage() {
             </div>
             {passwordError && <p className="text-red-500 text-sm">{passwordError}</p>}
             {passwordSuccess && <p className="text-green-600 dark:text-green-400 text-sm">{passwordSuccess}</p>}
-            <button type="submit" disabled={savingPassword}
+            <button type="submit" disabled={savingPassword || !isPasswordValid(newPassword)}
               className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-md text-sm font-medium transition-colors disabled:opacity-50">
               {savingPassword ? t('common.loading') : t('admin.changePassword')}
             </button>

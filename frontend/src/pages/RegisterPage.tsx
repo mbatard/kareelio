@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { authApi } from '../services/api';
+import { PasswordStrength, isPasswordValid } from '../components/PasswordStrength';
 
 export function RegisterPage() {
   const [email, setEmail] = useState('');
@@ -95,19 +96,17 @@ export function RegisterPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-              minLength={8}
+              minLength={12}
               required
             />
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              {t('auth.passwordMinLength')}
-            </p>
+            <PasswordStrength password={password} />
           </div>
           {error && (
             <p className="text-red-500 text-sm">{error}</p>
           )}
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || !isPasswordValid(password)}
             className="w-full py-2 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md disabled:opacity-50 transition-colors"
           >
             {loading ? t('common.loading') : t('auth.registerButton')}
