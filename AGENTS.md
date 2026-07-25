@@ -37,7 +37,8 @@
 
 ## Releases
 
-- semantic-release sur merge to main → bump version + CHANGELOG + Docker tags
+- semantic-release sur merge to main → crée le tag + GitHub Release + Docker tags
+- Ne pas utiliser de plugin semantic-release qui commit/push sur `main` (`@semantic-release/git`, `@semantic-release/changelog`) tant que `main` est protégé
 - Tags : `v1.2.3`
 - Images Docker : `ghcr.io/mbatard/kareelio-backend`, `ghcr.io/mbatard/kareelio-frontend`
 
@@ -54,7 +55,7 @@ make logs         # Follow logs
 ### Production (K8s)
 ```bash
 # 1. Créer et merger la PR sur main
-# 2. semantic-release crée le tag + push les images Docker
+# 2. semantic-release crée le tag, la GitHub Release et push les images Docker
 # 3. Déployer :
 make deploy VERSION=x.y.z
 
