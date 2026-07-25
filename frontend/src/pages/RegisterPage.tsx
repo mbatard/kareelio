@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { authApi } from '../services/api';
-import { PasswordStrength, isPasswordValid } from '../components/PasswordStrength';
+import { PasswordStrength } from '../components/PasswordStrength';
+import { isPasswordValid } from '../utils/password';
 
 export function RegisterPage() {
   const [email, setEmail] = useState('');

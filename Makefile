@@ -1,4 +1,4 @@
-.PHONY: dev build test lint migrate clean help
+.PHONY: dev build test lint migrate clean help deploy deploy-status deploy-logs
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -56,3 +56,17 @@ install-frontend: ## Install frontend dependencies
 
 release: ## Run semantic-release
 	npx semantic-release
+
+deploy: ## Deploy to K8s (usage: make deploy VERSION=x.y.z)
+ifndef VERSION
+	$(error VERSION is required. Usage: make deploy VERSION=x.y.z)
+endif
+	sed -i 's|ghcr.io/mbatard/kareelio-backend:.*|ghcr.io/mbatard/kareelio-backend:$(VERSION)|' deploy/k8s/backend-deployment.yaml
+	sed -i 's|ghcr.io/mbatard/kareelio-frontend:.*|ghcr.io/mbatard/kareelio-frontend:$(VERSION)|' deploy/k8s/frontend-deployment.yaml
+	kubectl apply -f deploy/k8s/
+
+deploy-status: ## Check K8s deployment status
+	kubectl get pods -n kareelio
+
+deploy-logs: ## View backend logs in K8s
+	kubectl logs -n kareelio -l app=backend --tail=50 -f

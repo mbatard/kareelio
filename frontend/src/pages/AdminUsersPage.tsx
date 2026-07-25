@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { userApi } from '../services/api';
 import { isValidEmail } from '../utils/email';
-import { PasswordStrength, isPasswordValid } from '../components/PasswordStrength';
+import { PasswordStrength } from '../components/PasswordStrength';
+import { isPasswordValid } from '../utils/password';
 import type { User } from '../types';
 
 export function AdminUsersPage() {

@@ -6,7 +6,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { isValidEmail } from '../utils/email';
-import { PasswordStrength, isPasswordValid } from '../components/PasswordStrength';
+import { PasswordStrength } from '../components/PasswordStrength';
+import { isPasswordValid } from '../utils/password';
 import type { User } from '../types';
 
 export function ProfilePage() {

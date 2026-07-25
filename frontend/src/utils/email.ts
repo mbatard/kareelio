@@ -5,8 +5,11 @@ export function isValidEmail(email: string): boolean {
     return false;
   }
 
-  if (/[\x00-\x1F\x7F]/.test(email)) {
-    return false;
+  for (let i = 0; i < email.length; i++) {
+    const code = email.charCodeAt(i);
+    if (code < 0x20 || code === 0x7F) {
+      return false;
+    }
   }
 
   const atIdx = email.lastIndexOf('@');
