@@ -94,8 +94,8 @@ func (h *ProfileHandler) ChangePassword(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if len(req.NewPassword) < 8 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "password must be at least 8 characters"})
+	if err := validation.ValidatePassword(req.NewPassword); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
 

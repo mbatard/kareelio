@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { userApi } from '../services/api';
 import { isValidEmail } from '../utils/email';
+import { PasswordStrength } from '../components/PasswordStrength';
+import { isPasswordValid } from '../utils/password';
 import type { User } from '../types';
 
 export function AdminUsersPage() {
@@ -61,12 +63,14 @@ export function AdminUsersPage() {
       {showForm && (
         <form onSubmit={handleCreate} className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6 space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <input placeholder={t('admin.email')} type="email" required value={formData.email}
-              onChange={(e) => { setFormData({ ...formData, email: e.target.value }); setEmailError(''); }}
-              className={`px-3 py-2 border rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none ${
-                emailError ? 'border-red-500 dark:border-red-500' : 'border-gray-300 dark:border-gray-600'
-              }`} />
-            {emailError && <p className="text-red-500 text-xs mt-1">{emailError}</p>}
+            <div>
+              <input placeholder={t('admin.email')} type="email" required value={formData.email}
+                onChange={(e) => { setFormData({ ...formData, email: e.target.value }); setEmailError(''); }}
+                className={`w-full px-3 py-2 border rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none ${
+                  emailError ? 'border-red-500 dark:border-red-500' : 'border-gray-300 dark:border-gray-600'
+                }`} />
+              {emailError && <p className="text-red-500 text-xs mt-1">{emailError}</p>}
+            </div>
             <input placeholder={t('admin.displayName')} required value={formData.display_name}
               onChange={(e) => setFormData({ ...formData, display_name: e.target.value })}
               className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none" />
@@ -74,11 +78,13 @@ export function AdminUsersPage() {
               onChange={(e) => setFormData({ ...formData, password: e.target.value })}
               className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none" />
           </div>
+          <PasswordStrength password={formData.password} />
           <textarea placeholder={t('profile.description')} value={formData.description}
             onChange={(e) => setFormData({ ...formData, description: e.target.value })} rows={2}
             className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none" />
           <div className="flex space-x-2">
-            <button type="submit" className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md text-sm font-medium transition-colors">
+            <button type="submit" disabled={!isPasswordValid(formData.password)}
+              className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md text-sm font-medium transition-colors disabled:opacity-50">
               {t('common.create')}
             </button>
             <button type="button" onClick={() => setShowForm(false)}
