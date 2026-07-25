@@ -27,6 +27,29 @@
 - `make deploy VERSION=x.y.z` — déploie sur K8s
 - **Avant de créer une PR** : `make lint && make test` doit passer
 
+## OpenCode Workflow
+
+- Configuration projet uniquement : `opencode.json` + `.opencode/`
+- Agents principaux :
+  - `platform-plan` — GPT-5.5, lecture seule, planification Platform/SRE
+  - `platform-build` — GPT-5 mini, agent par défaut, implémentation incrémentale
+  - `platform-review` — GPT-5.5, lecture seule, review sécurité/fiabilité
+  - `platform-commit` — GPT-5 mini, workflow git/PR sécurisé
+- Slash commands :
+  - `/plan <objectif>` — crée/met à jour `PLAN.md`
+  - `/next` — implémente uniquement la prochaine tâche non cochée de `PLAN.md`
+  - `/review` — review du diff courant vs `PLAN.md`
+  - `/commit` — commit sécurisé en Conventional Commit
+  - `/pr` — push feature branch + création PR
+- Pour toute tâche non triviale : commencer par `/plan`, puis avancer avec `/next`
+- `PLAN.md` est la source de vérité du travail incrémental en cours
+- Après chaque étape : valider, cocher la tâche, ajouter les risques/follow-ups découverts
+- Pour Go/TypeScript : validation ciblée puis build/lint/test pertinents
+- Pour Docker/K8s/Helm/Terraform : inclure impact, validation dry-run/plan, et rollback
+- Pour GitHub Actions : ne jamais utiliser `pull_request_target` sans revue sécurité explicite
+- Ne jamais exposer `secrets.*` dans un workflow `pull_request`
+- Les agents de review/plan ne doivent pas modifier les fichiers
+
 ## Sécurité (règles critiques)
 
 - Passwords : 12+ caractères, majuscule, minuscule, chiffre, spécial
@@ -34,6 +57,9 @@
 - Secrets : jamais en dur, toujours via env vars ou K8s secrets
 - CSRF : fail-closed sur POST/PUT/PATCH/DELETE sans Origin/Referer
 - Dependabot : reviewer et merger les PRs régulièrement
+- GitHub Actions : permissions minimales, pas de secrets sur PR externe, publication uniquement sur événements de confiance (`push` main/tags)
+- Terraform : jamais de `terraform destroy` sans approbation explicite
+- Kubernetes : jamais de suppression destructive (`kubectl delete`) sans approbation explicite
 
 ## Releases
 

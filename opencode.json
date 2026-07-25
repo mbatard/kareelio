@@ -1,0 +1,64 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "openai/gpt-5-mini",
+  "small_model": "openai/gpt-5-mini",
+  "default_agent": "platform-build",
+  "instructions": ["AGENTS.md", "PLAN.md"],
+  "skills": {
+    "paths": [".opencode/skills"]
+  },
+  "share": "disabled",
+  "snapshot": true,
+  "subagent_depth": 1,
+  "tool_output": {
+    "max_lines": 2000,
+    "max_bytes": 51200
+  },
+  "compaction": {
+    "auto": true,
+    "tail_turns": 8
+  },
+  "permission": {
+    "read": "allow",
+    "glob": "allow",
+    "grep": "allow",
+    "edit": "allow",
+    "todowrite": "allow",
+    "question": "allow",
+    "webfetch": "allow",
+    "bash": {
+      "*": "ask",
+      "git status*": "allow",
+      "git diff*": "allow",
+      "git log*": "allow",
+      "git branch*": "allow",
+      "git ls-remote*": "allow",
+      "go test*": "allow",
+      "go build*": "allow",
+      "go vet*": "allow",
+      "npm run build*": "allow",
+      "npm run lint*": "allow",
+      "npm test*": "allow",
+      "npm audit*": "allow",
+      "make lint*": "allow",
+      "make test*": "allow",
+      "make build*": "allow",
+      "docker compose ps*": "allow",
+      "docker compose logs*": "ask",
+      "kubectl get*": "allow",
+      "kubectl describe*": "allow",
+      "kubectl logs*": "allow",
+      "helm lint*": "allow",
+      "helm template*": "allow",
+      "terraform fmt*": "allow",
+      "terraform validate*": "allow",
+      "terraform plan*": "allow",
+      "rm -rf*": "deny",
+      "git reset --hard*": "deny",
+      "git push --force*": "deny",
+      "kubectl delete*": "deny",
+      "terraform apply*": "ask",
+      "terraform destroy*": "deny"
+    }
+  }
+}
