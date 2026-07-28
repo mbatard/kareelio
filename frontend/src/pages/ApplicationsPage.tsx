@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { jobApplicationApi } from '../services/api';
+import { STATUS_COLORS } from '../constants/statusColors';
 import type { JobApplication, JobStatus } from '../types';
 
 const STATUS_ORDER: JobStatus[] = ['draft', 'applied', 'responded', 'interview', 'test', 'offer', 'rejected', 'withdrawn'];
@@ -201,7 +202,7 @@ export function ApplicationsPage() {
                       </Link>
                       <p className="mt-1 text-sm text-gray-900 dark:text-gray-300 break-words">{app.title}</p>
                     </div>
-                    <span className="shrink-0 text-xs font-medium px-2 py-1 rounded bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
+                    <span className={`shrink-0 text-xs font-medium px-2 py-1 rounded ${STATUS_COLORS[app.status] || ''}`}>
                       {t(`status.${app.status}`)}
                     </span>
                   </div>
@@ -270,7 +271,7 @@ export function ApplicationsPage() {
                         </td>
                         <td className="px-4 py-3 text-gray-900 dark:text-gray-300">{app.title}</td>
                         <td className="px-4 py-3">
-                          <span className="text-xs font-medium px-2 py-1 rounded bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
+                          <span className={`text-xs font-medium px-2 py-1 rounded ${STATUS_COLORS[app.status] || ''}`}>
                             {t(`status.${app.status}`)}
                           </span>
                         </td>
