@@ -128,13 +128,23 @@ export function ApplicationsPage() {
     </th>
   );
 
+  const sortOptions: Array<{ value: SortKey; label: string }> = [
+    { value: 'date', label: t('jobs.lastDate') },
+    { value: 'company', label: t('jobs.company') },
+    { value: 'title', label: t('jobs.jobTitle') },
+    { value: 'status', label: t('jobs.status') },
+    { value: 'location', label: t('jobs.location') },
+    { value: 'remote', label: t('jobs.remote') },
+    { value: 'priority', label: t('jobs.priority') },
+  ];
+
   if (loading) return <div className="flex justify-center items-center h-64"><p>{t('common.loading')}</p></div>;
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{t('jobs.title')}</h1>
-        <div className="flex space-x-2">
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:space-x-2 sm:gap-0">
           <button onClick={handleExport}
             className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md text-sm font-medium transition-colors">
             {t('jobs.export')}
@@ -144,17 +154,17 @@ export function ApplicationsPage() {
             {t('jobs.import')}
           </button>
           <Link to="/applications/new"
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-medium transition-colors">
+            className="col-span-2 sm:col-span-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-center rounded-md text-sm font-medium transition-colors">
             {t('jobs.add')}
           </Link>
         </div>
       </div>
 
-      <div className="flex space-x-4 mb-6">
+      <div className="flex flex-col gap-3 sm:flex-row mb-4 sm:mb-6">
         <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('jobs.search')}
-          className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+          className="w-full sm:flex-1 sm:min-w-0 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none" />
         <select value={filter} onChange={(e) => setFilter(e.target.value as JobStatus | '')}
-          className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none">
+          className="w-full sm:w-auto px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none">
           <option value="">-- {t('jobs.filterByStatus')} --</option>
           {['draft','applied','responded','interview','test','offer','rejected','withdrawn'].map(s => (
             <option key={s} value={s}>{t(`status.${s}`)}</option>
@@ -162,66 +172,138 @@ export function ApplicationsPage() {
         </select>
       </div>
 
+      <div className="md:hidden grid grid-cols-[1fr_auto] gap-2 mb-4">
+        <select value={sortKey} onChange={(e) => setSortKey(e.target.value as SortKey)}
+          className="min-w-0 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none">
+          {sortOptions.map(option => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
+        </select>
+        <button type="button" onClick={() => setSortDir(d => d === 'asc' ? 'desc' : 'asc')}
+          className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-medium">
+          {sortDir === 'asc' ? '↑' : '↓'}
+        </button>
+      </div>
+
       {filtered.length === 0 ? (
         <p className="text-gray-500 dark:text-gray-400 text-center py-8">{t('jobs.noApplications')}</p>
       ) : (
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-            <thead className="bg-gray-50 dark:bg-gray-700">
-              <tr>
-                <SortHeader label={t('jobs.company')} sortField="company" />
-                <SortHeader label={t('jobs.jobTitle')} sortField="title" />
-                <SortHeader label={t('jobs.status')} sortField="status" />
-                <SortHeader label={t('jobs.location')} sortField="location" />
-                <SortHeader label={t('jobs.remote')} sortField="remote" />
-                <SortHeader label={t('jobs.priority')} sortField="priority" />
-                <SortHeader label={t('jobs.lastDate')} sortField="date" />
-                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">{t('jobs.announcement')}</th>
-                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">{t('admin.actions')}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-              {filtered.map((app) => {
-                const lastDate = getLastDate(app);
-                return (
-                  <tr key={app.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                    <td className="px-4 py-3">
-                      <Link to={`/applications/${app.id}/edit`} className="text-blue-600 hover:underline font-medium">{app.company}</Link>
-                    </td>
-                    <td className="px-4 py-3 text-gray-900 dark:text-gray-300">{app.title}</td>
-                    <td className="px-4 py-3">
-                      <span className="text-xs font-medium px-2 py-1 rounded bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
-                        {t(`status.${app.status}`)}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{app.location}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{t(`remote.${app.remote}`)}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{t(`priority.${app.priority}`)}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
-                      {lastDate ? new Date(lastDate).toLocaleDateString() : <span className="text-gray-400">-</span>}
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      {app.announcement_url ? (
-                        <a href={app.announcement_url} target="_blank" rel="noreferrer"
-                          className="text-blue-600 hover:underline text-sm">{t('common.view')}</a>
-                      ) : (
-                        <span className="text-gray-400">-</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <button onClick={() => handleDelete(app.id)} className="text-sm text-red-600 hover:underline">{t('common.delete')}</button>
-                    </td>
+        <>
+          <div className="md:hidden space-y-3">
+            {filtered.map((app) => {
+              const lastDate = getLastDate(app);
+              return (
+                <article key={app.id} className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <Link to={`/applications/${app.id}/edit`} className="text-blue-600 hover:underline font-semibold break-words">
+                        {app.company}
+                      </Link>
+                      <p className="mt-1 text-sm text-gray-900 dark:text-gray-300 break-words">{app.title}</p>
+                    </div>
+                    <span className="shrink-0 text-xs font-medium px-2 py-1 rounded bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
+                      {t(`status.${app.status}`)}
+                    </span>
+                  </div>
+
+                  <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                    <div className="min-w-0">
+                      <dt className="text-xs text-gray-500 dark:text-gray-400">{t('jobs.location')}</dt>
+                      <dd className="text-gray-700 dark:text-gray-300 break-words">{app.location || '-'}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs text-gray-500 dark:text-gray-400">{t('jobs.remote')}</dt>
+                      <dd className="text-gray-700 dark:text-gray-300">{t(`remote.${app.remote}`)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs text-gray-500 dark:text-gray-400">{t('jobs.priority')}</dt>
+                      <dd className="text-gray-700 dark:text-gray-300">{t(`priority.${app.priority}`)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs text-gray-500 dark:text-gray-400">{t('jobs.lastDate')}</dt>
+                      <dd className="text-gray-700 dark:text-gray-300">
+                        {lastDate ? new Date(lastDate).toLocaleDateString() : '-'}
+                      </dd>
+                    </div>
+                  </dl>
+
+                  <div className="flex flex-wrap items-center justify-between gap-3 pt-1 text-sm">
+                    {app.announcement_url ? (
+                      <a href={app.announcement_url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">
+                        {t('common.view')}
+                      </a>
+                    ) : (
+                      <span className="text-gray-400">{t('jobs.announcement')}: -</span>
+                    )}
+                    <button onClick={() => handleDelete(app.id)} className="text-red-600 hover:underline">
+                      {t('common.delete')}
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+
+          <div className="hidden md:block bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="min-w-[980px] divide-y divide-gray-200 dark:divide-gray-700">
+                <thead className="bg-gray-50 dark:bg-gray-700">
+                  <tr>
+                    <SortHeader label={t('jobs.company')} sortField="company" />
+                    <SortHeader label={t('jobs.jobTitle')} sortField="title" />
+                    <SortHeader label={t('jobs.status')} sortField="status" />
+                    <SortHeader label={t('jobs.location')} sortField="location" />
+                    <SortHeader label={t('jobs.remote')} sortField="remote" />
+                    <SortHeader label={t('jobs.priority')} sortField="priority" />
+                    <SortHeader label={t('jobs.lastDate')} sortField="date" />
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">{t('jobs.announcement')}</th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">{t('admin.actions')}</th>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                </thead>
+                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                  {filtered.map((app) => {
+                    const lastDate = getLastDate(app);
+                    return (
+                      <tr key={app.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                        <td className="px-4 py-3">
+                          <Link to={`/applications/${app.id}/edit`} className="text-blue-600 hover:underline font-medium">{app.company}</Link>
+                        </td>
+                        <td className="px-4 py-3 text-gray-900 dark:text-gray-300">{app.title}</td>
+                        <td className="px-4 py-3">
+                          <span className="text-xs font-medium px-2 py-1 rounded bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
+                            {t(`status.${app.status}`)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{app.location}</td>
+                        <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{t(`remote.${app.remote}`)}</td>
+                        <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{t(`priority.${app.priority}`)}</td>
+                        <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+                          {lastDate ? new Date(lastDate).toLocaleDateString() : <span className="text-gray-400">-</span>}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {app.announcement_url ? (
+                            <a href={app.announcement_url} target="_blank" rel="noreferrer"
+                              className="text-blue-600 hover:underline text-sm">{t('common.view')}</a>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <button onClick={() => handleDelete(app.id)} className="text-sm text-red-600 hover:underline">{t('common.delete')}</button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
       )}
 
       {showImport && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md max-h-[calc(100vh-2rem)] overflow-y-auto">
             <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4">{t('jobs.import')}</h2>
 
             <div className="space-y-4">
@@ -256,7 +338,7 @@ export function ApplicationsPage() {
               {importResult && <p className="text-green-600 dark:text-green-400 text-sm">{importResult}</p>}
               {importError && <p className="text-red-600 dark:text-red-400 text-sm">{importError}</p>}
 
-              <div className="flex space-x-2 pt-2">
+              <div className="flex flex-col sm:flex-row gap-2 pt-2">
                 <button onClick={handleImport} disabled={!importFile || importing}
                   className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-md text-sm font-medium transition-colors disabled:opacity-50">
                   {importing ? t('common.loading') : t('jobs.importConfirm')}
