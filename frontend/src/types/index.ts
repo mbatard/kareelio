@@ -92,7 +92,6 @@ export interface AboutInfo {
   version: string;
   name: string;
   description: string;
-  go_version: string;
 }
 
 export interface AdminDashboard {

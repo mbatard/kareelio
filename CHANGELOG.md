@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- About page now displays the application version injected at backend image build time and no longer displays the Go version.
 - Backend request logs now skip `/api/healthz` and `/api/readyz` probe traffic.
 - Local Docker Compose examples now pass job application encryption flags to the backend.
 

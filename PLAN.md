@@ -36,6 +36,7 @@ Improve observability and email-verification operations for Kareelio so that acc
 - Public resend endpoint `/api/auth/resend-verification` exists for unverified users by email; admin resend is available for selected unverified non-admin users.
 - Cluster diagnostics for image `sha-d79c4b3` confirmed backend/frontend pods were using the expected image digests, but `DATA_ENCRYPTION_KEY`, `DATA_ENCRYPTION_KEY_ID`, and `JOB_APPLICATIONS_REQUIRE_ENCRYPTED_READS` were missing from the live backend environment.
 - `.env.example`, `docker-compose.yml`, and `deploy/k8s/secret.example.yaml` now document/pass job application encryption settings so operators can align runtime env with the manifests.
+- The About page now displays the application version injected into the backend image at build time and no longer displays the Go version.
 - Audit actions already include `email_verification_resent`; audit UI translations exist for that action.
 - Existing pending local changes include previous DB-encryption work and opencode model config changes; keep this new plan separate and do not implement code during planning.
 
@@ -104,6 +105,12 @@ Improve observability and email-verification operations for Kareelio so that acc
   - Pass job application encryption env vars through Docker Compose for local parity.
   - Add a resend verification action directly in `AdminUsersPage` for unverified non-admin users, reusing the existing admin endpoint/i18n keys.
   - Findings: cluster outputs showed the deployed `sha-d79c4b3` images were correct, but live backend env was missing encryption keys and `JOB_APPLICATIONS_REQUIRE_ENCRYPTED_READS`; backend now logs those booleans at startup, examples document the required secret values, backend health probes no longer pollute request logs, and the resend action is visible in the admin user list. Verified with `go test ./...`, `go build ./...`, `npm ci`, `npm run lint`, `npm run build`, and `docker compose config`. `kubectl` is not installed in this environment, so server-side Kubernetes dry-run/diff could not be executed here.
+
+- [x] Update About page version display.
+  - Remove Go version from the `/api/about` response type and About UI.
+  - Replace the hardcoded backend version with a build-time `model.Version` value injected through backend Docker image builds.
+  - Pass `APP_VERSION` from GitHub Docker/Release workflows to the backend image build.
+  - Findings: About now reports the application release/build version instead of stale hardcoded `0.1.0`/Go `1.22`; local builds fall back to `dev`. Verified with backend/frontend builds and tests.
 
 ## Validation
 
