@@ -13,6 +13,9 @@ export function AdminUsersPage() {
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState({ email: '', password: '', display_name: '', description: '' });
   const [emailError, setEmailError] = useState('');
+  const [resendingUserId, setResendingUserId] = useState<string | null>(null);
+  const [resendMessage, setResendMessage] = useState('');
+  const [resendError, setResendError] = useState('');
   const { t } = useTranslation();
 
   const loadUsers = () => {
@@ -44,6 +47,22 @@ export function AdminUsersPage() {
     if (!confirm(t('admin.confirmDelete'))) return;
     await userApi.delete(user.id);
     loadUsers();
+  };
+
+  const handleResendVerification = async (user: User) => {
+    if (user.role === 'admin' || user.email_verified_at) return;
+    setResendingUserId(user.id);
+    setResendMessage('');
+    setResendError('');
+    try {
+      await userApi.resendVerification(user.id);
+      setResendMessage(t('admin.resendVerificationSuccess'));
+      loadUsers();
+    } catch {
+      setResendError(t('admin.resendVerificationError'));
+    } finally {
+      setResendingUserId(null);
+    }
   };
 
   if (loading) {
@@ -94,6 +113,9 @@ export function AdminUsersPage() {
           </div>
         </form>
       )}
+
+      {resendMessage && <p className="text-green-600 dark:text-green-400 text-sm mb-4">{resendMessage}</p>}
+      {resendError && <p className="text-red-600 dark:text-red-400 text-sm mb-4">{resendError}</p>}
 
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
         <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
@@ -150,10 +172,18 @@ export function AdminUsersPage() {
                 </td>
                 <td className="px-6 py-4 space-x-2">
                   {u.role !== 'admin' ? (
-                    <button onClick={() => handleDelete(u)}
-                      className="text-sm text-red-600 hover:underline cursor-pointer">
-                      {t('common.delete')}
-                    </button>
+                    <>
+                      {!u.email_verified_at && (
+                        <button onClick={() => handleResendVerification(u)} disabled={resendingUserId === u.id}
+                          className="text-sm text-indigo-600 hover:underline cursor-pointer disabled:opacity-50">
+                          {resendingUserId === u.id ? t('admin.resendVerificationLoading') : t('admin.resendVerification')}
+                        </button>
+                      )}
+                      <button onClick={() => handleDelete(u)}
+                        className="text-sm text-red-600 hover:underline cursor-pointer">
+                        {t('common.delete')}
+                      </button>
+                    </>
                   ) : (
                     <span className="text-xs text-gray-400">Protected</span>
                   )}

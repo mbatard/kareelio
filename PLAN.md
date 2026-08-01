@@ -18,7 +18,7 @@ Improve observability and email-verification operations for Kareelio so that acc
 
 ## Current State
 
-- Backend request logging currently emits only method/path/status/duration/request ID in `backend/internal/middleware/middleware.go`, e.g. `POST /api/auth/register`.
+- Backend request logging emits method/path/status/duration/request ID in `backend/internal/middleware/middleware.go`, e.g. `POST /api/auth/register`, and now excludes `/api/healthz` and `/api/readyz` probe traffic.
 - `AuthHandler.Register` now emits structured lifecycle/error logs and records mail-send success/failure context while keeping the public response generic on internal failures.
 - `AuthHandler.ResendVerification` now emits structured lifecycle/error logs and records mail-send success/failure context while keeping the public response generic on internal failures.
 - `mailer.SendVerificationEmail` now logs safe send start/success/error events and avoids leaking verification tokens or full links in logs.
@@ -26,13 +26,16 @@ Improve observability and email-verification operations for Kareelio so that acc
 - `.env.example` documents SMTP defaults for the unauthenticated relay path as `SMTP_PORT=25`; `docker-compose.yml` defaults `SMTP_PORT` to `25`; production `deploy/k8s/configmap.yaml` now sets `SMTP_PORT: "25"` and `SMTP_FROM`, while `SMTP_HOST` comes from `kareelio-secret` if configured and `SMTP_USERNAME`/`SMTP_PASSWORD` can be left empty for unauthenticated relay.
 - For a self-hosted relay on port 25, the backend must actually receive `SMTP_PORT=25`; frontend pod connectivity does not prove backend pod SMTP config or delivery path.
 - Backend now emits an explicit SMTP startup/config summary log.
+- Backend now emits a safe data-encryption startup/config summary log without exposing encryption key values.
 - Frontend `frontend/src/services/api.ts` now has env-gated safe axios request/success/error logs that emit action names, HTTP status, and backend request IDs when available.
 - `RegisterPage` now logs submit start/success/error without exposing passwords or tokens.
 - Frontend Nginx now exposes dedicated `/healthz` and `/readyz` endpoints with access logs disabled for probe traffic.
-- Admin user management exists in `AdminUsersPage` and `AdminUserEditPage`; admin can create/edit/delete users, reset passwords, and resend verification for unverified non-admin users from the edit page.
+- Admin user management exists in `AdminUsersPage` and `AdminUserEditPage`; admin can create/edit/delete users, reset passwords, and resend verification for unverified non-admin users from the list and edit pages.
 - Backend now exposes `POST /api/users/{id}/resend-verification` for admin-only forced verification-email resend on unverified non-admin users.
 - Admin-created users currently go through `UserHandler.Create`, which creates an active user but does not create or send an email-verification token.
-- Public resend endpoint `/api/auth/resend-verification` exists for unverified users by email, but there is no admin endpoint/button to force resend for a selected user.
+- Public resend endpoint `/api/auth/resend-verification` exists for unverified users by email; admin resend is available for selected unverified non-admin users.
+- Cluster diagnostics for image `sha-d79c4b3` confirmed backend/frontend pods were using the expected image digests, but `DATA_ENCRYPTION_KEY`, `DATA_ENCRYPTION_KEY_ID`, and `JOB_APPLICATIONS_REQUIRE_ENCRYPTED_READS` were missing from the live backend environment.
+- `.env.example`, `docker-compose.yml`, and `deploy/k8s/secret.example.yaml` now document/pass job application encryption settings so operators can align runtime env with the manifests.
 - Audit actions already include `email_verification_resent`; audit UI translations exist for that action.
 - Existing pending local changes include previous DB-encryption work and opencode model config changes; keep this new plan separate and do not implement code during planning.
 
@@ -93,6 +96,14 @@ Improve observability and email-verification operations for Kareelio so that acc
   - Add dedicated `/healthz` and `/readyz` endpoints in `frontend/nginx.conf` with `access_log off` so liveness/readiness probes do not spam access logs.
   - Update the frontend Kubernetes probes to use the new probe endpoints instead of `/`.
   - Findings: frontend probe traffic now returns `204` from Nginx without access-log spam, and the Kubernetes frontend probes now target `/healthz` and `/readyz`. Verified with `git diff --check`, `docker build -t kareelio-frontend-probe-test ./frontend`, and `docker compose up -d --build postgres backend frontend` followed by curl checks against `/healthz` and `/readyz`. `kubectl` is not installed in this environment, so server-side dry-run/diff could not be executed here.
+
+- [x] Add runtime diagnostics and operator fixes for missing backend behavior.
+  - Add safe backend startup diagnostics for data-encryption configuration and job application encryption flags, without logging key values or key IDs.
+  - Exclude backend `/api/healthz` and `/api/readyz` from request logs so registration/admin logs are not drowned by probe traffic.
+  - Document `DATA_ENCRYPTION_KEY_ID` and `DATA_ENCRYPTION_KEY` in Kubernetes secret examples, local env examples, and README operator guidance.
+  - Pass job application encryption env vars through Docker Compose for local parity.
+  - Add a resend verification action directly in `AdminUsersPage` for unverified non-admin users, reusing the existing admin endpoint/i18n keys.
+  - Findings: cluster outputs showed the deployed `sha-d79c4b3` images were correct, but live backend env was missing encryption keys and `JOB_APPLICATIONS_REQUIRE_ENCRYPTED_READS`; backend now logs those booleans at startup, examples document the required secret values, backend health probes no longer pollute request logs, and the resend action is visible in the admin user list. Verified with `go test ./...`, `go build ./...`, `npm ci`, `npm run lint`, `npm run build`, and `docker compose config`. `kubectl` is not installed in this environment, so server-side Kubernetes dry-run/diff could not be executed here.
 
 ## Validation
 

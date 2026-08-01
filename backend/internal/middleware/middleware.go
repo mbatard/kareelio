@@ -14,6 +14,9 @@ func Logging(next http.Handler) http.Handler {
 		wrapped := &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
 
 		next.ServeHTTP(wrapped, r)
+		if skipRequestLog(r.URL.Path) {
+			return
+		}
 
 		log.Printf("%s %s %d %s %s",
 			r.Method,
@@ -23,6 +26,10 @@ func Logging(next http.Handler) http.Handler {
 			r.Header.Get("X-Request-ID"),
 		)
 	})
+}
+
+func skipRequestLog(path string) bool {
+	return path == "/api/healthz" || path == "/api/readyz"
 }
 
 func RequestID(next http.Handler) http.Handler {

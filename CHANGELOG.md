@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Safe backend startup diagnostics for job application encryption configuration.
+- Kubernetes secret example entries for job application encryption keys.
+- Admin users list action to resend verification email for unverified non-admin users.
+
+### Changed
+
+- Backend request logs now skip `/api/healthz` and `/api/readyz` probe traffic.
+- Local Docker Compose examples now pass job application encryption flags to the backend.
+
 ## [1.2.0] - 2026-08-01
 
 ### Added
