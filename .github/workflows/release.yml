@@ -85,6 +85,8 @@ jobs:
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.version=${{ steps.release.outputs.version }}
+          build-args: |
+            APP_VERSION=${{ steps.release.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

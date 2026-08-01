@@ -4,14 +4,14 @@ type AboutResponse struct {
 	Version     string `json:"version"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
-	GoVersion   string `json:"go_version"`
 }
+
+var Version = "dev"
 
 func GetAbout() AboutResponse {
 	return AboutResponse{
-		Version:     "0.1.0",
+		Version:     Version,
 		Name:        "Kareelio",
 		Description: "Job application tracker",
-		GoVersion:   "1.22",
 	}
 }
