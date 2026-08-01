@@ -21,6 +21,7 @@ Improve observability and email-verification operations for Kareelio so that acc
 - Backend request logging emits method/path/status/duration/request ID in `backend/internal/middleware/middleware.go`, e.g. `POST /api/auth/register`, and now excludes `/api/healthz` and `/api/readyz` probe traffic.
 - `AuthHandler.Register` now emits structured lifecycle/error logs and records mail-send success/failure context while keeping the public response generic on internal failures.
 - `AuthHandler.ResendVerification` now emits structured lifecycle/error logs and records mail-send success/failure context while keeping the public response generic on internal failures.
+- Public registration and public verification resend now queue verification-email delivery asynchronously so SMTP greeting/connect/send latency does not delay the user-facing success response; admin forced resend remains synchronous so admins still see actionable mail failures.
 - `mailer.SendVerificationEmail` now logs safe send start/success/error events and avoids leaking verification tokens or full links in logs.
 - `mailer.send` now uses an explicit SMTP client flow with request timeouts, supports unauthenticated SMTP when username/password are empty, and returns phase-specific errors for connect/starttls/auth/sender/recipient/data/quit failures.
 - `.env.example` documents SMTP defaults for the unauthenticated relay path as `SMTP_PORT=25`; `docker-compose.yml` defaults `SMTP_PORT` to `25`; production `deploy/k8s/configmap.yaml` now sets `SMTP_PORT: "25"` and `SMTP_FROM`, while `SMTP_HOST` comes from `kareelio-secret` if configured and `SMTP_USERNAME`/`SMTP_PASSWORD` can be left empty for unauthenticated relay.
@@ -111,6 +112,12 @@ Improve observability and email-verification operations for Kareelio so that acc
   - Replace the hardcoded backend version with a build-time `model.Version` value injected through backend Docker image builds.
   - Pass `APP_VERSION` from GitHub Docker/Release workflows to the backend image build.
   - Findings: About now reports the application release/build version instead of stale hardcoded `0.1.0`/Go `1.22`; local builds fall back to `dev`. Verified with backend/frontend builds and tests.
+
+- [x] Queue public verification emails asynchronously.
+  - Keep user/token creation synchronous, then queue verification email delivery after token persistence for public registration and public resend.
+  - Preserve safe request-scoped logs for queued/success/error outcomes without logging passwords, tokens, or verification links.
+  - Keep admin forced resend synchronous so a broken SMTP relay still returns an actionable admin-facing error.
+  - Findings: public registration/resend responses no longer wait for SMTP failures such as `421 4.3.2 No system resources`; SMTP failures remain visible in backend async logs. Verified with targeted handler tests plus backend test/build validation.
 
 ## Validation
 

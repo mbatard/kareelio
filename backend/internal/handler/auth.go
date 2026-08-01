@@ -234,12 +234,8 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 	logAuthEvent(r, "register.token_created", "user_id="+user.ID, "email="+user.Email, "expires_at="+expiresAt.UTC().Format(time.RFC3339))
 
-	mailErr := h.mailer.SendVerificationEmail(requestID, user.Email, token)
-	mailSent := mailErr == nil
-	if mailErr != nil {
-		logAuthEvent(r, "register.error", "stage=mail_send", "user_id="+user.ID, "email="+user.Email, "error="+mailErr.Error())
-	}
-	logAuthEvent(r, "register.completed", "user_id="+user.ID, "email="+user.Email, fmt.Sprintf("mail_sent=%t", mailSent))
+	sendVerificationEmailAsync(requestID, "register", user.ID, user.Email, token, h.mailer)
+	logAuthEvent(r, "register.completed", "user_id="+user.ID, "email="+user.Email, "mail_queued=true")
 
 	_ = h.auditRepo.Log(r.Context(), &model.AuditEvent{
 		ActorUserID: &user.ID,
@@ -351,12 +347,8 @@ func (h *AuthHandler) ResendVerification(w http.ResponseWriter, r *http.Request)
 	}
 	logAuthEvent(r, "resend_verification.token_created", "user_id="+user.ID, "email="+user.Email, "expires_at="+expiresAt.UTC().Format(time.RFC3339))
 
-	mailErr := h.mailer.SendVerificationEmail(r.Header.Get("X-Request-ID"), user.Email, token)
-	mailSent := mailErr == nil
-	if mailErr != nil {
-		logAuthEvent(r, "resend_verification.error", "stage=mail_send", "user_id="+user.ID, "email="+user.Email, "error="+mailErr.Error())
-	}
-	logAuthEvent(r, "resend_verification.completed", "user_id="+user.ID, "email="+user.Email, fmt.Sprintf("mail_sent=%t", mailSent))
+	sendVerificationEmailAsync(r.Header.Get("X-Request-ID"), "resend_verification", user.ID, user.Email, token, h.mailer)
+	logAuthEvent(r, "resend_verification.completed", "user_id="+user.ID, "email="+user.Email, "mail_queued=true")
 
 	_ = h.auditRepo.Log(r.Context(), &model.AuditEvent{
 		ActorUserID: &user.ID,
@@ -407,6 +399,18 @@ type verificationMailer interface {
 
 type auditLogger interface {
 	Log(context.Context, *model.AuditEvent) error
+}
+
+func sendVerificationEmailAsync(requestID, eventPrefix, userID, email, token string, mailer verificationMailer) {
+	logAuthEventByRequestID(requestID, eventPrefix+".mail_send_queued", "user_id="+userID, "email="+email)
+	go func() {
+		if err := mailer.SendVerificationEmail(requestID, email, token); err != nil {
+			logAuthEventByRequestID(requestID, eventPrefix+".error", "stage=mail_send", "user_id="+userID, "email="+email, "error="+err.Error())
+			logAuthEventByRequestID(requestID, eventPrefix+".mail_send_completed", "user_id="+userID, "email="+email, "mail_sent=false")
+			return
+		}
+		logAuthEventByRequestID(requestID, eventPrefix+".mail_send_completed", "user_id="+userID, "email="+email, "mail_sent=true")
+	}()
 }
 
 func adminResendVerification(r *http.Request, userRepo userLookup, evRepo verificationTokenStore, mailer verificationMailer, auditRepo auditLogger, ttlHours int) (int, map[string]string) {
@@ -494,6 +498,15 @@ func actorRole(user *model.User) string {
 }
 
 func logAdminResendEvent(requestID, event string, fields ...string) {
+	parts := []string{"event=" + event}
+	if requestID != "" {
+		parts = append(parts, "request_id="+requestID)
+	}
+	parts = append(parts, fields...)
+	log.Print(strings.Join(parts, " "))
+}
+
+func logAuthEventByRequestID(requestID, event string, fields ...string) {
 	parts := []string{"event=" + event}
 	if requestID != "" {
 		parts = append(parts, "request_id="+requestID)
