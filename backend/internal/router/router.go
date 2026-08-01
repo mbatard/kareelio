@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/user/kareelio/backend/internal/config"
+	"github.com/user/kareelio/backend/internal/encryption"
 	"github.com/user/kareelio/backend/internal/handler"
 	"github.com/user/kareelio/backend/internal/mailer"
 	"github.com/user/kareelio/backend/internal/middleware"
@@ -14,10 +15,10 @@ import (
 	"github.com/user/kareelio/backend/internal/repository"
 )
 
-func New(db *pgxpool.Pool, cfg *config.Config) *chi.Mux {
+func New(db *pgxpool.Pool, cfg *config.Config, enc *encryption.Manager) *chi.Mux {
 	userRepo := repository.NewUserRepository(db)
 	sessionRepo := repository.NewSessionRepository(db, cfg.SessionDurationHours)
-	jaRepo := repository.NewJobApplicationRepository(db)
+	jaRepo := repository.NewJobApplicationRepository(db, enc, cfg.JobApplicationRequireEncryptedReads)
 	adminDashRepo := repository.NewAdminDashboardRepository(db)
 	auditRepo := repository.NewAuditRepository(db)
 	evRepo := repository.NewEmailVerificationRepository(db)
@@ -89,9 +90,9 @@ func New(db *pgxpool.Pool, cfg *config.Config) *chi.Mux {
 				r.Get("/", userHandler.List)
 				r.Post("/", userHandler.Create)
 				r.Get("/{id}", userHandler.Get)
-			r.Put("/{id}", userHandler.Update)
-			r.Delete("/{id}", userHandler.Delete)
-			r.Put("/{id}/password", userHandler.ChangePassword)
+				r.Put("/{id}", userHandler.Update)
+				r.Delete("/{id}", userHandler.Delete)
+				r.Put("/{id}/password", userHandler.ChangePassword)
 			})
 		})
 	})
