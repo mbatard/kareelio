@@ -38,6 +38,14 @@ func main() {
 	}
 
 	var dataEnc *encryption.Manager
+	log.Printf("Data encryption config: data_encryption_configured=%t data_encryption_key_id_present=%t data_encryption_key_present=%t job_applications_require_encrypted_reads=%t job_applications_backfill=%t job_applications_backfill_dry_run=%t",
+		cfg.DataEncryptionKey != "" && cfg.DataEncryptionKeyID != "",
+		cfg.DataEncryptionKeyID != "",
+		cfg.DataEncryptionKey != "",
+		cfg.JobApplicationRequireEncryptedReads,
+		cfg.JobApplicationBackfill,
+		cfg.JobApplicationBackfillDryRun,
+	)
 	if cfg.DataEncryptionKey != "" || cfg.DataEncryptionKeyID != "" {
 		dataEnc, err = encryption.New(cfg.DataEncryptionKeyID, cfg.DataEncryptionKey)
 		if err != nil {

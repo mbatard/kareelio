@@ -143,7 +143,7 @@ Key environment variables:
 | `JOB_APPLICATIONS_BACKFILL_DRY_RUN` | Counts backfill candidates without writing when `true` |
 | `JOB_APPLICATIONS_REQUIRE_ENCRYPTED_READS` | Fails startup/reads if encrypted data is required but unavailable |
 
-For production mail, `SMTP_HOST` is provided from the Kubernetes secret, while `SMTP_PORT=25` and `SMTP_FROM` are configured in the ConfigMap. Do not commit real SMTP credentials or encryption keys.
+For production mail, `SMTP_HOST` is provided from the Kubernetes secret, while `SMTP_PORT=25` and `SMTP_FROM` are configured in the ConfigMap. For production encryption, `DATA_ENCRYPTION_KEY_ID` and `DATA_ENCRYPTION_KEY` must be present in the Kubernetes secret; generate the key with a 32-byte base64 value such as `openssl rand -base64 32`. Do not commit real SMTP credentials or encryption keys.
 
 ## API Endpoints
 
