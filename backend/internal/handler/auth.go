@@ -168,6 +168,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		Email       string `json:"email"`
 		Password    string `json:"password"`
 		DisplayName string `json:"display_name"`
+		Language    string `json:"language"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		logAuthEvent(r, "register.error", "stage=decode", "error=invalid request body")
@@ -198,14 +199,16 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	if req.DisplayName == "" {
 		req.DisplayName = req.Email
 	}
+	language := resolvePublicLanguage(req.Language, r.Header.Get("Accept-Language"))
 
 	requestID := r.Header.Get("X-Request-ID")
-	logAuthEvent(r, "register.start", "email="+req.Email)
+	logAuthEvent(r, "register.start", "email="+req.Email, "language="+language)
 
 	createReq := model.CreateUserRequest{
 		Email:       req.Email,
 		Password:    req.Password,
 		DisplayName: req.DisplayName,
+		Language:    language,
 	}
 
 	user, err := h.userRepo.Create(r.Context(), createReq, model.RoleUser)
@@ -215,7 +218,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"message": "if the email can be registered, a verification email has been sent"})
 		return
 	}
-	logAuthEvent(r, "register.user_created", "user_id="+user.ID, "email="+user.Email)
+	logAuthEvent(r, "register.user_created", "user_id="+user.ID, "email="+user.Email, "language="+user.Language)
 
 	token, tokenHash, err := generateVerificationToken()
 	if err != nil {
@@ -234,7 +237,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 	logAuthEvent(r, "register.token_created", "user_id="+user.ID, "email="+user.Email, "expires_at="+expiresAt.UTC().Format(time.RFC3339))
 
-	sendVerificationEmailAsync(requestID, "register", user.ID, user.Email, token, h.mailer)
+	sendVerificationEmailAsync(requestID, "register", user.ID, user.Email, token, user.Language, h.mailer)
 	logAuthEvent(r, "register.completed", "user_id="+user.ID, "email="+user.Email, "mail_queued=true")
 
 	_ = h.auditRepo.Log(r.Context(), &model.AuditEvent{
@@ -347,7 +350,7 @@ func (h *AuthHandler) ResendVerification(w http.ResponseWriter, r *http.Request)
 	}
 	logAuthEvent(r, "resend_verification.token_created", "user_id="+user.ID, "email="+user.Email, "expires_at="+expiresAt.UTC().Format(time.RFC3339))
 
-	sendVerificationEmailAsync(r.Header.Get("X-Request-ID"), "resend_verification", user.ID, user.Email, token, h.mailer)
+	sendVerificationEmailAsync(r.Header.Get("X-Request-ID"), "resend_verification", user.ID, user.Email, token, user.Language, h.mailer)
 	logAuthEvent(r, "resend_verification.completed", "user_id="+user.ID, "email="+user.Email, "mail_queued=true")
 
 	_ = h.auditRepo.Log(r.Context(), &model.AuditEvent{
@@ -394,23 +397,47 @@ type verificationTokenStore interface {
 }
 
 type verificationMailer interface {
-	SendVerificationEmail(requestID, to, token string) error
+	SendVerificationEmail(requestID, to, token, language string) error
 }
 
 type auditLogger interface {
 	Log(context.Context, *model.AuditEvent) error
 }
 
-func sendVerificationEmailAsync(requestID, eventPrefix, userID, email, token string, mailer verificationMailer) {
-	logAuthEventByRequestID(requestID, eventPrefix+".mail_send_queued", "user_id="+userID, "email="+email)
+func sendVerificationEmailAsync(requestID, eventPrefix, userID, email, token, language string, mailer verificationMailer) {
+	language = resolveMailLanguage(language)
+	logAuthEventByRequestID(requestID, eventPrefix+".mail_send_queued", "user_id="+userID, "email="+email, "language="+language)
 	go func() {
-		if err := mailer.SendVerificationEmail(requestID, email, token); err != nil {
-			logAuthEventByRequestID(requestID, eventPrefix+".error", "stage=mail_send", "user_id="+userID, "email="+email, "error="+err.Error())
-			logAuthEventByRequestID(requestID, eventPrefix+".mail_send_completed", "user_id="+userID, "email="+email, "mail_sent=false")
+		if err := mailer.SendVerificationEmail(requestID, email, token, language); err != nil {
+			logAuthEventByRequestID(requestID, eventPrefix+".error", "stage=mail_send", "user_id="+userID, "email="+email, "language="+language, "error="+err.Error())
+			logAuthEventByRequestID(requestID, eventPrefix+".mail_send_completed", "user_id="+userID, "email="+email, "language="+language, "mail_sent=false")
 			return
 		}
-		logAuthEventByRequestID(requestID, eventPrefix+".mail_send_completed", "user_id="+userID, "email="+email, "mail_sent=true")
+		logAuthEventByRequestID(requestID, eventPrefix+".mail_send_completed", "user_id="+userID, "email="+email, "language="+language, "mail_sent=true")
 	}()
+}
+
+func resolvePublicLanguage(requested, acceptLanguage string) string {
+	if requested == "fr" || requested == "en" {
+		return requested
+	}
+	for _, lang := range strings.Split(acceptLanguage, ",") {
+		code := strings.ToLower(strings.TrimSpace(strings.SplitN(lang, ";", 2)[0]))
+		if strings.HasPrefix(code, "fr") {
+			return "fr"
+		}
+		if strings.HasPrefix(code, "en") {
+			return "en"
+		}
+	}
+	return "en"
+}
+
+func resolveMailLanguage(language string) string {
+	if language == "fr" {
+		return "fr"
+	}
+	return "en"
 }
 
 func adminResendVerification(r *http.Request, userRepo userLookup, evRepo verificationTokenStore, mailer verificationMailer, auditRepo auditLogger, ttlHours int) (int, map[string]string) {
@@ -454,7 +481,7 @@ func adminResendVerification(r *http.Request, userRepo userLookup, evRepo verifi
 
 	logAdminResendEvent(requestID, "admin_resend_verification.token_created", "target_user_id="+target.ID, "target_email="+target.Email, "expires_at="+expiresAt.UTC().Format(time.RFC3339))
 
-	if err := mailer.SendVerificationEmail(requestID, target.Email, token); err != nil {
+	if err := mailer.SendVerificationEmail(requestID, target.Email, token, resolveMailLanguage(target.Language)); err != nil {
 		logAdminResendEvent(requestID, "admin_resend_verification.error", "target_user_id="+target.ID, "target_email="+target.Email, "stage=mail_send", "error="+err.Error())
 		return http.StatusBadGateway, map[string]string{"error": "unable to send verification email"}
 	}

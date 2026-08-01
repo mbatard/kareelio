@@ -32,7 +32,7 @@ func TestSendVerificationEmailAsyncReturnsBeforeMailerCompletes(t *testing.T) {
 
 	returned := make(chan struct{})
 	go func() {
-		sendVerificationEmailAsync("req-123", "register", "user-1", "user@example.com", "secret-token", mailer)
+		sendVerificationEmailAsync("req-123", "register", "user-1", "user@example.com", "secret-token", "fr", mailer)
 		close(returned)
 	}()
 
@@ -48,7 +48,7 @@ func TestSendVerificationEmailAsyncReturnsBeforeMailerCompletes(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("mailer was not called")
 	}
-	if call.requestID != "req-123" || call.to != "user@example.com" || call.token != "secret-token" {
+	if call.requestID != "req-123" || call.to != "user@example.com" || call.token != "secret-token" || call.language != "fr" {
 		t.Fatalf("unexpected mail call: %+v", call)
 	}
 
@@ -60,13 +60,13 @@ func TestSendVerificationEmailAsyncReturnsBeforeMailerCompletes(t *testing.T) {
 	}
 
 	logs := buf.String()
-	if !strings.Contains(logs, "event=register.mail_send_queued request_id=req-123 user_id=user-1 email=user@example.com") {
+	if !strings.Contains(logs, "event=register.mail_send_queued request_id=req-123 user_id=user-1 email=user@example.com language=fr") {
 		t.Fatalf("missing queued log: %s", logs)
 	}
-	if !strings.Contains(logs, "event=register.error request_id=req-123 stage=mail_send user_id=user-1 email=user@example.com error=smtp client init: 421 no system resources") {
+	if !strings.Contains(logs, "event=register.error request_id=req-123 stage=mail_send user_id=user-1 email=user@example.com language=fr error=smtp client init: 421 no system resources") {
 		t.Fatalf("missing async error log: %s", logs)
 	}
-	if !strings.Contains(logs, "event=register.mail_send_completed request_id=req-123 user_id=user-1 email=user@example.com mail_sent=false") {
+	if !strings.Contains(logs, "event=register.mail_send_completed request_id=req-123 user_id=user-1 email=user@example.com language=fr mail_sent=false") {
 		t.Fatalf("missing completion log: %s", logs)
 	}
 	if strings.Contains(logs, "secret-token") {
@@ -94,7 +94,7 @@ func TestSendVerificationEmailAsyncLogsSuccess(t *testing.T) {
 	log.SetPrefix("")
 	log.SetOutput(&buf)
 
-	sendVerificationEmailAsync("req-456", "resend_verification", "user-2", "resend@example.com", "secret-token", mailer)
+	sendVerificationEmailAsync("req-456", "resend_verification", "user-2", "resend@example.com", "secret-token", "system", mailer)
 
 	select {
 	case <-mailer.started:
@@ -109,11 +109,35 @@ func TestSendVerificationEmailAsyncLogsSuccess(t *testing.T) {
 	}
 
 	logs := buf.String()
-	if !strings.Contains(logs, "event=resend_verification.mail_send_completed request_id=req-456 user_id=user-2 email=resend@example.com mail_sent=true") {
+	if !strings.Contains(logs, "event=resend_verification.mail_send_completed request_id=req-456 user_id=user-2 email=resend@example.com language=en mail_sent=true") {
 		t.Fatalf("missing success log: %s", logs)
 	}
 	if strings.Contains(logs, "secret-token") {
 		t.Fatalf("log output leaked token: %s", logs)
+	}
+}
+
+func TestResolvePublicLanguage(t *testing.T) {
+	tests := []struct {
+		name           string
+		requested      string
+		acceptLanguage string
+		want           string
+	}{
+		{name: "requested fr", requested: "fr", acceptLanguage: "en-US,en;q=0.9", want: "fr"},
+		{name: "requested en", requested: "en", acceptLanguage: "fr-FR,fr;q=0.9", want: "en"},
+		{name: "accept fr", requested: "", acceptLanguage: "fr-FR,fr;q=0.9,en;q=0.8", want: "fr"},
+		{name: "accept en", requested: "", acceptLanguage: "en-US,en;q=0.9", want: "en"},
+		{name: "fallback", requested: "system", acceptLanguage: "de-DE,de;q=0.9", want: "en"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := resolvePublicLanguage(tt.requested, tt.acceptLanguage)
+			if got != tt.want {
+				t.Fatalf("expected %s, got %s", tt.want, got)
+			}
+		})
 	}
 }
 
@@ -128,10 +152,11 @@ type mailCall struct {
 	requestID string
 	to        string
 	token     string
+	language  string
 }
 
-func (m *blockingVerificationMailer) SendVerificationEmail(requestID, to, token string) error {
-	m.started <- mailCall{requestID: requestID, to: to, token: token}
+func (m *blockingVerificationMailer) SendVerificationEmail(requestID, to, token, language string) error {
+	m.started <- mailCall{requestID: requestID, to: to, token: token, language: language}
 	<-m.release
 	defer close(m.done)
 	return m.err

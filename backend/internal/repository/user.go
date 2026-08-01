@@ -23,18 +23,29 @@ func (r *UserRepository) Create(ctx context.Context, req model.CreateUserRequest
 		return nil, fmt.Errorf("unable to hash password: %w", err)
 	}
 
+	language := normalizeCreateUserLanguage(req.Language)
+
 	var user model.User
 	err = r.db.QueryRow(ctx,
 		`INSERT INTO users (email, display_name, description, password_hash, role, is_active, language, theme)
-		 VALUES ($1, $2, $3, $4, $5, true, 'system', 'system')
+		 VALUES ($1, $2, $3, $4, $5, true, $6, 'system')
 		 RETURNING id, email, display_name, description, role, is_active, email_verified_at, language, theme, created_at, updated_at`,
-		req.Email, req.DisplayName, req.Description, string(hash), role,
+		req.Email, req.DisplayName, req.Description, string(hash), role, language,
 	).Scan(&user.ID, &user.Email, &user.DisplayName, &user.Description, &user.Role, &user.IsActive, &user.EmailVerifiedAt, &user.Language, &user.Theme, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create user: %w", err)
 	}
 
 	return &user, nil
+}
+
+func normalizeCreateUserLanguage(language string) string {
+	switch language {
+	case "fr", "en", "system":
+		return language
+	default:
+		return "system"
+	}
 }
 
 func (r *UserRepository) GetByID(ctx context.Context, id string) (*model.User, error) {

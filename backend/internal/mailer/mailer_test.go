@@ -147,14 +147,17 @@ func TestSendVerificationEmailLogsStartAndSuccessWithoutTokenLeak(t *testing.T) 
 		if to != "user@example.com" {
 			t.Fatalf("unexpected recipient: %s", to)
 		}
-		if subject == "" || body == "" {
-			t.Fatal("expected subject and body")
+		if subject != "Kareelio - Vérifiez votre adresse e-mail" {
+			t.Fatalf("unexpected subject: %s", subject)
+		}
+		if !strings.Contains(body, "Merci pour votre inscription sur Kareelio.") || strings.Contains(body, "Thank you for signing up on Kareelio.") {
+			t.Fatalf("unexpected body language: %s", body)
 		}
 		return nil
 	}
 
 	token := "token-secret-123"
-	if err := m.SendVerificationEmail("req-123", "user@example.com", token); err != nil {
+	if err := m.SendVerificationEmail("req-123", "user@example.com", token, "fr"); err != nil {
 		t.Fatalf("SendVerificationEmail returned error: %v", err)
 	}
 
@@ -163,6 +166,7 @@ func TestSendVerificationEmailLogsStartAndSuccessWithoutTokenLeak(t *testing.T) 
 		"event=mail.verification_send_start",
 		"request_id=req-123",
 		"recipient=user@example.com",
+		"language=fr",
 		"event=mail.verification_send_success",
 	} {
 		if !strings.Contains(out, want) {
@@ -192,13 +196,14 @@ func TestSendVerificationEmailWithoutSMTPLogsOnly(t *testing.T) {
 
 	m := &Mailer{cfg: &config.Config{AppPublicURL: "https://app.example"}}
 	token := "token-secret-456"
-	if err := m.SendVerificationEmail("req-456", "user@example.com", token); err != nil {
+	if err := m.SendVerificationEmail("req-456", "user@example.com", token, "system"); err != nil {
 		t.Fatalf("SendVerificationEmail returned error: %v", err)
 	}
 
 	out := buf.String()
 	for _, want := range []string{
 		"event=mail.verification_send_start",
+		"language=en",
 		"configured=false",
 		"transport=log_only",
 		"event=mail.verification_send_success",
@@ -233,7 +238,7 @@ func TestSendVerificationEmailToPlainRelay(t *testing.T) {
 	}
 
 	token := "relay-token-789"
-	if err := m.SendVerificationEmail("req-relay", "user@example.com", token); err != nil {
+	if err := m.SendVerificationEmail("req-relay", "user@example.com", token, "en"); err != nil {
 		t.Fatalf("SendVerificationEmail returned error: %v", err)
 	}
 

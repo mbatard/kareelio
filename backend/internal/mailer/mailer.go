@@ -81,13 +81,34 @@ func SMTPConfigSummary(cfg *config.Config) string {
 	)
 }
 
-func (m *Mailer) SendVerificationEmail(requestID, to, token string) error {
-	subject := "Kareelio - Vérifiez votre adresse e-mail"
-	if strings.Contains(m.cfg.SMTPFrom, "noreply") || strings.Contains(m.cfg.SMTPFrom, "no-reply") {
-		subject = "Kareelio - Verify your email address"
+func (m *Mailer) SendVerificationEmail(requestID, to, token, language string) error {
+	language = normalizeLanguage(language)
+	subject, body := m.verificationEmailContent(token, language)
+
+	if !m.IsConfigured() {
+		logMailEvent("mail.verification_send_start", requestID, "recipient="+to, "language="+language, "configured=false", "transport=log_only")
+		logMailEvent("mail.verification_send_success", requestID, "recipient="+to, "language="+language, "configured=false", "transport=log_only")
+		return nil
 	}
 
-	body := fmt.Sprintf(`Bonjour,
+	logMailEvent("mail.verification_send_start", requestID, "recipient="+to, "language="+language, "configured=true", "transport="+m.transportMode())
+
+	send := m.sendFunc
+	if send == nil {
+		send = m.send
+	}
+	if err := send(to, subject, body); err != nil {
+		logMailEvent("mail.verification_send_error", requestID, "recipient="+to, "language="+language, "error="+err.Error())
+		return err
+	}
+
+	logMailEvent("mail.verification_send_success", requestID, "recipient="+to, "language="+language, "configured=true", "transport="+m.transportMode())
+	return nil
+}
+
+func (m *Mailer) verificationEmailContent(token, language string) (string, string) {
+	if language == "fr" {
+		return "Kareelio - Vérifiez votre adresse e-mail", fmt.Sprintf(`Bonjour,
 
 Merci pour votre inscription sur Kareelio.
 
@@ -100,9 +121,10 @@ Ce lien expire dans %d heures.
 Si vous n'avez pas créé de compte, vous pouvez ignorer cet e-mail.
 
 ---
-Kareelio - Suivi de candidatures
+Kareelio - Suivi de candidatures`, m.cfg.AppPublicURL, token, m.cfg.VerificationTokenTTLHours)
+	}
 
-Hello,
+	return "Kareelio - Verify your email address", fmt.Sprintf(`Hello,
 
 Thank you for signing up on Kareelio.
 
@@ -115,27 +137,14 @@ This link expires in %d hours.
 If you did not create an account, you can ignore this email.
 
 ---
-Kareelio - Job Application Tracker`, m.cfg.AppPublicURL, token, m.cfg.VerificationTokenTTLHours, m.cfg.AppPublicURL, token, m.cfg.VerificationTokenTTLHours)
+Kareelio - Job Application Tracker`, m.cfg.AppPublicURL, token, m.cfg.VerificationTokenTTLHours)
+}
 
-	if !m.IsConfigured() {
-		logMailEvent("mail.verification_send_start", requestID, "recipient="+to, "configured=false", "transport=log_only")
-		logMailEvent("mail.verification_send_success", requestID, "recipient="+to, "configured=false", "transport=log_only")
-		return nil
+func normalizeLanguage(language string) string {
+	if language == "fr" {
+		return "fr"
 	}
-
-	logMailEvent("mail.verification_send_start", requestID, "recipient="+to, "configured=true", "transport="+m.transportMode())
-
-	send := m.sendFunc
-	if send == nil {
-		send = m.send
-	}
-	if err := send(to, subject, body); err != nil {
-		logMailEvent("mail.verification_send_error", requestID, "recipient="+to, "error="+err.Error())
-		return err
-	}
-
-	logMailEvent("mail.verification_send_success", requestID, "recipient="+to, "configured=true", "transport="+m.transportMode())
-	return nil
+	return "en"
 }
 
 func (m *Mailer) send(to, subject, body string) error {
