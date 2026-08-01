@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { authApi } from '../services/api';
+import { authApi, logFrontendEvent } from '../services/api';
 import { PasswordStrength } from '../components/PasswordStrength';
 import { isPasswordValid } from '../utils/password';
 
@@ -18,14 +18,18 @@ export function RegisterPage() {
     e.preventDefault();
     setError('');
     setLoading(true);
+    logFrontendEvent('register.submit_start');
     try {
       await authApi.register({ email, password, display_name: displayName || undefined });
+      logFrontendEvent('register.submit_success');
       setSuccess(true);
     } catch (err: any) {
       const data = err?.response?.data;
       if (data?.message) {
+        logFrontendEvent('register.submit_success');
         setSuccess(true);
       } else {
+        logFrontendEvent('register.submit_error');
         setError(t('auth.registerError'));
       }
     } finally {

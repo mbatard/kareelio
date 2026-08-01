@@ -89,6 +89,7 @@ func New(db *pgxpool.Pool, cfg *config.Config, enc *encryption.Manager) *chi.Mux
 			r.Route("/api/users", func(r chi.Router) {
 				r.Get("/", userHandler.List)
 				r.Post("/", userHandler.Create)
+				r.Post("/{id}/resend-verification", authHandler.AdminResendVerification)
 				r.Get("/{id}", userHandler.Get)
 				r.Put("/{id}", userHandler.Update)
 				r.Delete("/{id}", userHandler.Delete)

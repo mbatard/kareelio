@@ -193,7 +193,12 @@
       "confirmPassword": "Confirmer le mot de passe",
       "emailVerified": "Vérification email",
       "verified": "Vérifié",
-      "pending": "En attente"
+      "pending": "En attente",
+      "resendVerification": "Renvoyer la vérification",
+      "resendVerificationHelp": "Envoyer un nouvel e-mail de vérification à cet utilisateur non vérifié.",
+      "resendVerificationLoading": "Envoi...",
+      "resendVerificationSuccess": "E-mail de vérification envoyé.",
+      "resendVerificationError": "Impossible de renvoyer l'e-mail de vérification."
     },
     "about": {
       "title": "À propos",

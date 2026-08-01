@@ -26,6 +26,7 @@ type Config struct {
 	SMTPUsername                        string
 	SMTPPassword                        string
 	SMTPFrom                            string
+	SMTPTimeoutSeconds                  int
 	VerificationTokenTTLHours           int
 	DataEncryptionKeyID                 string
 	DataEncryptionKey                   string
@@ -56,6 +57,7 @@ func Load() *Config {
 		SMTPUsername:                        getEnv("SMTP_USERNAME", ""),
 		SMTPPassword:                        getEnv("SMTP_PASSWORD", ""),
 		SMTPFrom:                            getEnv("SMTP_FROM", ""),
+		SMTPTimeoutSeconds:                  getEnvInt("SMTP_TIMEOUT_SECONDS", 10),
 		VerificationTokenTTLHours:           getEnvInt("VERIFICATION_TOKEN_TTL_HOURS", 24),
 		DataEncryptionKeyID:                 getEnv("DATA_ENCRYPTION_KEY_ID", ""),
 		DataEncryptionKey:                   getEnv("DATA_ENCRYPTION_KEY", ""),

@@ -16,5 +16,6 @@ data:
   REGISTRATION_ENABLED: "true"
   VERIFICATION_TOKEN_TTL_HOURS: "24"
   JOB_APPLICATIONS_REQUIRE_ENCRYPTED_READS: "true"
-  SMTP_PORT: "587"
+  # Port 25 matches the self-hosted unauthenticated relay path; change with rollout + dry-run validation.
+  SMTP_PORT: "25"
   SMTP_FROM: "noreply@kareelio.fr"

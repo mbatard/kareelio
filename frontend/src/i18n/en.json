@@ -193,7 +193,12 @@
       "confirmPassword": "Confirm Password",
       "emailVerified": "Email Verified",
       "verified": "Verified",
-      "pending": "Pending"
+      "pending": "Pending",
+      "resendVerification": "Resend Verification",
+      "resendVerificationHelp": "Send a fresh verification email to this unverified user.",
+      "resendVerificationLoading": "Sending...",
+      "resendVerificationSuccess": "Verification email sent.",
+      "resendVerificationError": "Unable to resend verification email."
     },
     "about": {
       "title": "About",
