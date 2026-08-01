@@ -37,6 +37,7 @@ export interface RegisterRequest {
   email: string;
   password: string;
   display_name?: string;
+  language?: 'fr' | 'en';
 }
 
 export interface UpdateUserRequest {

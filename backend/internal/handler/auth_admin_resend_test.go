@@ -16,7 +16,7 @@ import (
 )
 
 func TestAdminResendVerificationSuccess(t *testing.T) {
-	userRepo := &fakeUserLookup{user: &model.User{ID: "user-1", Email: "user@example.com", Role: model.RoleUser}}
+	userRepo := &fakeUserLookup{user: &model.User{ID: "user-1", Email: "user@example.com", Role: model.RoleUser, Language: "fr"}}
 	evRepo := &fakeTokenStore{}
 	mailer := &fakeResendMailer{}
 	auditRepo := &fakeAuditRepo{}
@@ -49,7 +49,7 @@ func TestAdminResendVerificationSuccess(t *testing.T) {
 	if evRepo.deletedUserID != "user-1" || evRepo.createdUserID != "user-1" {
 		t.Fatalf("unexpected token store calls: %+v", evRepo)
 	}
-	if mailer.requestID != "req-123" || mailer.to != "user@example.com" || mailer.token == "" {
+	if mailer.requestID != "req-123" || mailer.to != "user@example.com" || mailer.token == "" || mailer.language != "fr" {
 		t.Fatalf("unexpected mailer calls: %+v", mailer)
 	}
 	if auditRepo.event == nil || auditRepo.event.Action != model.AuditActionEmailVerificationResent || auditRepo.event.TargetID != "user-1" {
@@ -160,13 +160,15 @@ type fakeResendMailer struct {
 	requestID string
 	to        string
 	token     string
+	language  string
 	err       error
 }
 
-func (f *fakeResendMailer) SendVerificationEmail(requestID, to, token string) error {
+func (f *fakeResendMailer) SendVerificationEmail(requestID, to, token, language string) error {
 	f.requestID = requestID
 	f.to = to
 	f.token = token
+	f.language = language
 	return f.err
 }
 

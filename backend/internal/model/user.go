@@ -29,6 +29,7 @@ type CreateUserRequest struct {
 	Password    string `json:"password"`
 	DisplayName string `json:"display_name"`
 	Description string `json:"description"`
+	Language    string `json:"language"`
 }
 
 type UpdateUserRequest struct {

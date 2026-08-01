@@ -9,12 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Public authentication pages now expose the same language and theme toggles as the authenticated navbar.
 - Safe backend startup diagnostics for job application encryption configuration.
 - Kubernetes secret example entries for job application encryption keys.
 - Admin users list action to resend verification email for unverified non-admin users.
 
 ### Changed
 
+- Verification emails are now sent in the user's selected language instead of using a bilingual body and sender-derived subject language.
 - Public registration and public verification resend now queue email delivery asynchronously so SMTP latency does not delay user-facing success responses.
 - About page now displays the application version injected at backend image build time and no longer displays the Go version.
 - Backend request logs now skip `/api/healthz` and `/api/readyz` probe traffic.

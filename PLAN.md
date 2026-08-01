@@ -22,6 +22,8 @@ Improve observability and email-verification operations for Kareelio so that acc
 - `AuthHandler.Register` now emits structured lifecycle/error logs and records mail-send success/failure context while keeping the public response generic on internal failures.
 - `AuthHandler.ResendVerification` now emits structured lifecycle/error logs and records mail-send success/failure context while keeping the public response generic on internal failures.
 - Public registration and public verification resend now queue verification-email delivery asynchronously so SMTP greeting/connect/send latency does not delay the user-facing success response; admin forced resend remains synchronous so admins still see actionable mail failures.
+- Public login, registration, and email-verification pages now expose the same language/theme toggles as the authenticated navbar, and registration sends the resolved language to the backend.
+- Verification emails now use the user's selected/stored language for the subject and body; invalid or `system` mail language values fall back to English.
 - `mailer.SendVerificationEmail` now logs safe send start/success/error events and avoids leaking verification tokens or full links in logs.
 - `mailer.send` now uses an explicit SMTP client flow with request timeouts, supports unauthenticated SMTP when username/password are empty, and returns phase-specific errors for connect/starttls/auth/sender/recipient/data/quit failures.
 - `.env.example` documents SMTP defaults for the unauthenticated relay path as `SMTP_PORT=25`; `docker-compose.yml` defaults `SMTP_PORT` to `25`; production `deploy/k8s/configmap.yaml` now sets `SMTP_PORT: "25"` and `SMTP_FROM`, while `SMTP_HOST` comes from `kareelio-secret` if configured and `SMTP_USERNAME`/`SMTP_PASSWORD` can be left empty for unauthenticated relay.
@@ -118,6 +120,12 @@ Improve observability and email-verification operations for Kareelio so that acc
   - Preserve safe request-scoped logs for queued/success/error outcomes without logging passwords, tokens, or verification links.
   - Keep admin forced resend synchronous so a broken SMTP relay still returns an actionable admin-facing error.
   - Findings: public registration/resend responses no longer wait for SMTP failures such as `421 4.3.2 No system resources`; SMTP failures remain visible in backend async logs. Verified with targeted handler tests plus backend test/build validation.
+
+- [x] Localize public auth pages and verification emails.
+  - Add public language/theme toggles on login, registration, and email-verification pages using the existing navbar visual style.
+  - Send the resolved registration language (`fr` or `en`) to the backend and persist it on the new user.
+  - Localize verification email subject/body from the user's selected/stored language for registration, public resend, and admin resend.
+  - Findings: the previous mail subject depended on `SMTP_FROM` and the body was bilingual; emails now use an explicit user language with English fallback for legacy `system` values.
 
 ## Validation
 
