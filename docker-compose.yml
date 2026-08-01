@@ -41,7 +41,8 @@ services:
       REGISTRATION_ENABLED: "true"
       VERIFICATION_TOKEN_TTL_HOURS: "24"
       SMTP_HOST: ${SMTP_HOST:-}
-      SMTP_PORT: ${SMTP_PORT:-587}
+      # Default to unauthenticated port-25 relay; set SMTP_USERNAME/PASSWORD only if your relay requires auth.
+      SMTP_PORT: ${SMTP_PORT:-25}
       SMTP_USERNAME: ${SMTP_USERNAME:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_FROM: ${SMTP_FROM:-}

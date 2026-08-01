@@ -1,5 +1,65 @@
-import axios from 'axios';
+import axios, { type InternalAxiosRequestConfig } from 'axios';
 import type { User, LoginRequest, RegisterRequest, UpdateProfileRequest, CreateUserRequest, UpdateUserRequest, JobApplication, CreateJobApplicationRequest, UpdateJobApplicationRequest, AboutInfo, AdminDashboard, AuditListResponse } from '../types';
+
+type LoggedRequestConfig = InternalAxiosRequestConfig & {
+  metadata?: {
+    action?: string;
+    startedAt?: number;
+  };
+};
+
+const frontendLogsEnabled = import.meta.env.DEV || import.meta.env.VITE_DEBUG_LOGS === 'true';
+
+function logFrontendEvent(event: string, fields: string[] = []) {
+  if (!frontendLogsEnabled) return;
+  const parts = [`event=${event}`, ...fields];
+  console.info(`[frontend] ${parts.join(' ')}`);
+}
+
+function getRequestId(headers: Record<string, unknown> | undefined) {
+  const value = headers?.['x-request-id'] ?? headers?.['X-Request-ID'];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function resolveAction(method: string | undefined, path: string) {
+  const upper = method?.toUpperCase() ?? 'GET';
+  if (path === '/api/auth/login' && upper === 'POST') return 'auth.login';
+  if (path === '/api/auth/register' && upper === 'POST') return 'auth.register';
+  if (path === '/api/auth/verify-email' && upper === 'POST') return 'auth.verify_email';
+  if (path === '/api/auth/resend-verification' && upper === 'POST') return 'auth.resend_verification';
+  if (path === '/api/auth/logout' && upper === 'POST') return 'auth.logout';
+  if (path === '/api/auth/me' && upper === 'GET') return 'auth.me';
+  if (path === '/api/profile' && upper === 'GET') return 'profile.get';
+  if (path === '/api/profile' && upper === 'PUT') return 'profile.update';
+  if (path === '/api/profile/password' && upper === 'PUT') return 'profile.change_password';
+  if (path === '/api/users' && upper === 'GET') return 'users.list';
+  if (path === '/api/users' && upper === 'POST') return 'users.create';
+  if (/^\/api\/users\/[^/]+$/.test(path) && upper === 'GET') return 'users.get';
+  if (/^\/api\/users\/[^/]+$/.test(path) && upper === 'PUT') return 'users.update';
+  if (/^\/api\/users\/[^/]+$/.test(path) && upper === 'DELETE') return 'users.delete';
+  if (/^\/api\/users\/[^/]+\/password$/.test(path) && upper === 'PUT') return 'users.change_password';
+  if (path === '/api/job-applications' && upper === 'GET') return 'job_applications.list';
+  if (path === '/api/job-applications' && upper === 'POST') return 'job_applications.create';
+  if (/^\/api\/job-applications\/[^/]+$/.test(path) && upper === 'GET') return 'job_applications.get';
+  if (/^\/api\/job-applications\/[^/]+$/.test(path) && upper === 'PUT') return 'job_applications.update';
+  if (/^\/api\/job-applications\/[^/]+$/.test(path) && upper === 'DELETE') return 'job_applications.delete';
+  if (path === '/api/job-applications/export' && upper === 'GET') return 'job_applications.export';
+  if (path === '/api/job-applications/import' && upper === 'POST') return 'job_applications.import';
+  if (path === '/api/about' && upper === 'GET') return 'about.get';
+  if (path === '/api/admin/dashboard' && upper === 'GET') return 'admin.dashboard';
+  if (path === '/api/admin/audit' && upper === 'GET') return 'admin.audit';
+  return 'api.unknown';
+}
+
+function resolvePath(config?: LoggedRequestConfig) {
+  if (!config) return '';
+  const baseURL = config.baseURL || window.location.origin;
+  try {
+    return new URL(config.url ?? '', baseURL).pathname;
+  } catch {
+    return config.url ?? '';
+  }
+}
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '',
@@ -10,11 +70,44 @@ const api = axios.create({
 });
 
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    const config = response.config as LoggedRequestConfig;
+    const action = config.metadata?.action ?? resolveAction(config.method, resolvePath(config));
+    const requestId = getRequestId(response.headers as Record<string, unknown> | undefined);
+    logFrontendEvent('api.request_success', [
+      `action=${action}`,
+      `status=${response.status}`,
+      ...(requestId ? [`request_id=${requestId}`] : []),
+    ]);
+    return response;
+  },
   (error) => {
+    const config = error?.config as LoggedRequestConfig | undefined;
+    const action = config?.metadata?.action ?? resolveAction(config?.method, resolvePath(config));
+    const status = error?.response?.status ?? 'network_error';
+    const requestId = getRequestId(error?.response?.headers as Record<string, unknown> | undefined);
+    logFrontendEvent('api.request_error', [
+      `action=${action}`,
+      `status=${status}`,
+      ...(requestId ? [`request_id=${requestId}`] : []),
+    ]);
     return Promise.reject(error);
   }
 );
+
+api.interceptors.request.use((config) => {
+  const loggedConfig = config as LoggedRequestConfig;
+  const action = loggedConfig.metadata?.action ?? resolveAction(loggedConfig.method, resolvePath(loggedConfig));
+  loggedConfig.metadata = {
+    ...(loggedConfig.metadata ?? {}),
+    action,
+    startedAt: Date.now(),
+  };
+  logFrontendEvent('api.request_start', [`action=${action}`]);
+  return loggedConfig;
+});
+
+export { logFrontendEvent, getRequestId };
 
 export const authApi = {
   login: async (data: LoginRequest): Promise<{ user: User }> => {
@@ -81,6 +174,10 @@ export const userApi = {
   },
   changePassword: async (id: string, newPassword: string): Promise<void> => {
     await api.put(`/api/users/${id}/password`, { new_password: newPassword });
+  },
+  resendVerification: async (id: string): Promise<{ message: string }> => {
+    const res = await api.post(`/api/users/${id}/resend-verification`);
+    return res.data;
   },
 };
 

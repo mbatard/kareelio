@@ -25,6 +25,9 @@ export function AdminUserEditPage() {
   const [passwordError, setPasswordError] = useState('');
   const [passwordSuccess, setPasswordSuccess] = useState('');
   const [savingPassword, setSavingPassword] = useState(false);
+  const [resendingVerification, setResendingVerification] = useState(false);
+  const [resendMessage, setResendMessage] = useState('');
+  const [resendError, setResendError] = useState('');
 
   useEffect(() => {
     if (!id) return;
@@ -82,6 +85,27 @@ export function AdminUserEditPage() {
       setPasswordError(t('common.error'));
     } finally {
       setSavingPassword(false);
+    }
+  };
+
+  const handleResendVerification = async () => {
+    if (!id || !user || user.role === 'admin' || user.email_verified_at) return;
+    setResendingVerification(true);
+    setResendMessage('');
+    setResendError('');
+    try {
+      await userApi.resendVerification(id);
+      setResendMessage(t('admin.resendVerificationSuccess'));
+      const refreshed = await userApi.get(id);
+      setUser(refreshed);
+      setEmail(refreshed.email);
+      setDisplayName(refreshed.display_name);
+      setDescription(refreshed.description);
+      setIsActive(refreshed.is_active);
+    } catch {
+      setResendError(t('admin.resendVerificationError'));
+    } finally {
+      setResendingVerification(false);
     }
   };
 
@@ -178,6 +202,23 @@ export function AdminUserEditPage() {
             </button>
           </form>
         </div>
+
+        {!user.email_verified_at && (
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">{t('admin.resendVerification')}</h2>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">{t('admin.resendVerificationHelp')}</p>
+            {resendMessage && <p className="text-green-600 dark:text-green-400 text-sm mb-3">{resendMessage}</p>}
+            {resendError && <p className="text-red-600 dark:text-red-400 text-sm mb-3">{resendError}</p>}
+            <button
+              type="button"
+              onClick={handleResendVerification}
+              disabled={resendingVerification}
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md text-sm font-medium transition-colors disabled:opacity-50"
+            >
+              {resendingVerification ? t('admin.resendVerificationLoading') : t('admin.resendVerification')}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
