@@ -12,6 +12,7 @@ import (
 	"github.com/user/kareelio/backend/internal/config"
 	"github.com/user/kareelio/backend/internal/database"
 	"github.com/user/kareelio/backend/internal/encryption"
+	"github.com/user/kareelio/backend/internal/mailer"
 	"github.com/user/kareelio/backend/internal/repository"
 	"github.com/user/kareelio/backend/internal/router"
 	"golang.org/x/crypto/bcrypt"
@@ -19,6 +20,7 @@ import (
 
 func main() {
 	cfg := config.Load()
+	mailer.LogSMTPConfigSummary(cfg)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
