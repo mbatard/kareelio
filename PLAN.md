@@ -28,6 +28,7 @@ Improve observability and email-verification operations for Kareelio so that acc
 - Backend now emits an explicit SMTP startup/config summary log.
 - Frontend `frontend/src/services/api.ts` now has env-gated safe axios request/success/error logs that emit action names, HTTP status, and backend request IDs when available.
 - `RegisterPage` now logs submit start/success/error without exposing passwords or tokens.
+- Frontend Nginx now exposes dedicated `/healthz` and `/readyz` endpoints with access logs disabled for probe traffic.
 - Admin user management exists in `AdminUsersPage` and `AdminUserEditPage`; admin can create/edit/delete users, reset passwords, and resend verification for unverified non-admin users from the edit page.
 - Backend now exposes `POST /api/users/{id}/resend-verification` for admin-only forced verification-email resend on unverified non-admin users.
 - Admin-created users currently go through `UserHandler.Create`, which creates an active user but does not create or send an email-verification token.
@@ -87,6 +88,11 @@ Improve observability and email-verification operations for Kareelio so that acc
   - Docker/K8s if manifests change: `docker compose config`; `kubectl apply --dry-run=server -f deploy/k8s/`; `kubectl diff -f deploy/k8s/` where available.
   - Production rollout: deploy backend/frontend images, verify `/api/auth/register`, public resend, and admin force resend against server-mail logs.
   - Findings: local end-to-end validation succeeded with a disposable SMTP capture server and live backend against local PostgreSQL. Verified three mail flows (`/api/auth/register`, `/api/auth/resend-verification`, and admin `POST /api/users/{id}/resend-verification`) produced SMTP deliveries and request-scoped logs without leaking verification links in backend logs. `docker compose config`, `go test ./...`, `go build ./...`, `npm run lint`, and `npm run build` all passed; `kubectl` is not installed in this environment, so server-side Kubernetes dry-run/diff could not be executed here.
+
+- [x] Mask frontend Nginx live/ready probe logs.
+  - Add dedicated `/healthz` and `/readyz` endpoints in `frontend/nginx.conf` with `access_log off` so liveness/readiness probes do not spam access logs.
+  - Update the frontend Kubernetes probes to use the new probe endpoints instead of `/`.
+  - Findings: frontend probe traffic now returns `204` from Nginx without access-log spam, and the Kubernetes frontend probes now target `/healthz` and `/readyz`. Verified with `git diff --check`, `docker build -t kareelio-frontend-probe-test ./frontend`, and `docker compose up -d --build postgres backend frontend` followed by curl checks against `/healthz` and `/readyz`. `kubectl` is not installed in this environment, so server-side dry-run/diff could not be executed here.
 
 ## Validation
 
