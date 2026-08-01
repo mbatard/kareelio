@@ -11,6 +11,7 @@ import (
 
 	"github.com/user/kareelio/backend/internal/config"
 	"github.com/user/kareelio/backend/internal/database"
+	"github.com/user/kareelio/backend/internal/encryption"
 	"github.com/user/kareelio/backend/internal/repository"
 	"github.com/user/kareelio/backend/internal/router"
 	"golang.org/x/crypto/bcrypt"
@@ -34,6 +35,31 @@ func main() {
 		}
 	}
 
+	var dataEnc *encryption.Manager
+	if cfg.DataEncryptionKey != "" || cfg.DataEncryptionKeyID != "" {
+		dataEnc, err = encryption.New(cfg.DataEncryptionKeyID, cfg.DataEncryptionKey)
+		if err != nil {
+			log.Fatalf("Failed to initialize data encryption: %v", err)
+		}
+	}
+	if cfg.JobApplicationRequireEncryptedReads && dataEnc == nil {
+		log.Fatalf("JOB_APPLICATIONS_REQUIRE_ENCRYPTED_READS requires DATA_ENCRYPTION_KEY")
+	}
+
+	if cfg.JobApplicationBackfill {
+		backfillRepo := repository.NewJobApplicationRepository(pool, dataEnc, false)
+		stats, err := backfillRepo.BackfillEncryptedColumns(ctx, cfg.JobApplicationBackfillDryRun)
+		if err != nil {
+			log.Fatalf("Failed to backfill job applications: %v", err)
+		}
+		if cfg.JobApplicationBackfillDryRun {
+			log.Printf("Job application backfill dry-run: %d candidate row(s)", stats.Candidates)
+		} else {
+			log.Printf("Job application backfill completed: %d updated row(s) out of %d candidate row(s)", stats.Updated, stats.Candidates)
+		}
+		return
+	}
+
 	hash, err := bcrypt.GenerateFromPassword([]byte(cfg.DefaultAdminPassword), bcrypt.DefaultCost)
 	if err != nil {
 		log.Fatalf("Failed to hash admin password: %v", err)
@@ -49,7 +75,7 @@ func main() {
 
 	_ = userRepo
 
-	r := router.New(pool, cfg)
+	r := router.New(pool, cfg, dataEnc)
 
 	addr := ":" + cfg.ServerPort
 	srv := &http.Server{
