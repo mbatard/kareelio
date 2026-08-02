@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/user/kareelio/backend/internal/model"
@@ -19,7 +20,11 @@ type adminRegistrationMailer interface {
 }
 
 func sendAdminNewRegistrationEmailAsync(requestID string, adminRepo adminNotificationAdminLookup, mailer adminRegistrationMailer, registeredUser *model.User) {
-	go sendAdminNewRegistrationEmail(context.Background(), requestID, adminRepo, mailer, registeredUser)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	go func() {
+		defer cancel()
+		sendAdminNewRegistrationEmail(ctx, requestID, adminRepo, mailer, registeredUser)
+	}()
 }
 
 func sendAdminNewRegistrationEmail(ctx context.Context, requestID string, adminRepo adminNotificationAdminLookup, mailer adminRegistrationMailer, registeredUser *model.User) {
