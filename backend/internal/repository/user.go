@@ -76,6 +76,23 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*model.U
 	return &user, nil
 }
 
+func (r *UserRepository) GetActiveAdmin(ctx context.Context) (*model.User, error) {
+	var user model.User
+	err := r.db.QueryRow(ctx,
+		`SELECT id, email, language
+		 FROM users
+		 WHERE role = 'admin' AND is_active = true
+		 ORDER BY updated_at DESC, created_at DESC
+		 LIMIT 1`,
+	).Scan(&user.ID, &user.Email, &user.Language)
+	if err != nil {
+		return nil, fmt.Errorf("unable to get active admin: %w", err)
+	}
+
+	user.Role = model.RoleAdmin
+	return &user, nil
+}
+
 func (r *UserRepository) Update(ctx context.Context, id string, req model.UpdateUserRequest) (*model.User, error) {
 	sets := []string{}
 	args := []any{}

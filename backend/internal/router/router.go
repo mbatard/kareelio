@@ -21,6 +21,7 @@ func New(db *pgxpool.Pool, cfg *config.Config, enc *encryption.Manager) *chi.Mux
 	jaRepo := repository.NewJobApplicationRepository(db, enc, cfg.JobApplicationRequireEncryptedReads)
 	adminDashRepo := repository.NewAdminDashboardRepository(db)
 	auditRepo := repository.NewAuditRepository(db)
+	adminNotifRepo := repository.NewAdminNotificationRepository(db)
 	evRepo := repository.NewEmailVerificationRepository(db)
 
 	m := mailer.New(cfg)
@@ -31,6 +32,7 @@ func New(db *pgxpool.Pool, cfg *config.Config, enc *encryption.Manager) *chi.Mux
 	jaHandler := handler.NewJobApplicationHandler(jaRepo, auditRepo)
 	csvHandler := handler.NewCSVHandler(jaRepo, auditRepo)
 	adminDashHandler := handler.NewAdminDashboardHandler(adminDashRepo)
+	adminNotifHandler := handler.NewAdminNotificationHandler(adminNotifRepo)
 	auditHandler := handler.NewAuditHandler(auditRepo)
 	aboutHandler := handler.NewAboutHandler()
 	healthHandler := handler.NewHealthHandler(db)
@@ -84,6 +86,8 @@ func New(db *pgxpool.Pool, cfg *config.Config, enc *encryption.Manager) *chi.Mux
 			r.Use(middleware.RequireRole(model.RoleAdmin))
 
 			r.Get("/api/admin/dashboard", adminDashHandler.Get)
+			r.Get("/api/admin/notifications", adminNotifHandler.GetUserRegistrations)
+			r.Post("/api/admin/notifications/user-registrations/ack", adminNotifHandler.AcknowledgeUserRegistrations)
 			r.Get("/api/admin/audit", auditHandler.List)
 
 			r.Route("/api/users", func(r chi.Router) {

@@ -258,6 +258,146 @@ func TestSendVerificationEmailToPlainRelay(t *testing.T) {
 	}
 }
 
+func TestSendAdminNewRegistrationEmailLogsStartAndSuccessWithoutLeak(t *testing.T) {
+	var buf bytes.Buffer
+	oldFlags := log.Flags()
+	oldPrefix := log.Prefix()
+	oldOutput := log.Writer()
+	t.Cleanup(func() {
+		log.SetFlags(oldFlags)
+		log.SetPrefix(oldPrefix)
+		log.SetOutput(oldOutput)
+	})
+	log.SetFlags(0)
+	log.SetPrefix("")
+	log.SetOutput(&buf)
+
+	m := &Mailer{
+		cfg: &config.Config{
+			SMTPHost:     "smtp.internal",
+			SMTPPort:     "25",
+			SMTPFrom:     "noreply@kareelio.test",
+			AppPublicURL: "https://app.example",
+		},
+	}
+	m.sendFunc = func(to, subject, body string) error {
+		if to != "admin@example.com" {
+			t.Fatalf("unexpected recipient: %s", to)
+		}
+		if subject != "Kareelio - Nouvel utilisateur inscrit" {
+			t.Fatalf("unexpected subject: %s", subject)
+		}
+		for _, want := range []string{"Jane Doe", "user@example.com", "https://app.example/admin/users"} {
+			if !strings.Contains(body, want) {
+				t.Fatalf("body missing %q: %s", want, body)
+			}
+		}
+		for _, leak := range []string{"token=", "password=", "verify-email?token="} {
+			if strings.Contains(body, leak) {
+				t.Fatalf("body leaked %q: %s", leak, body)
+			}
+		}
+		return nil
+	}
+
+	if err := m.SendAdminNewRegistrationEmail("req-123", "admin@example.com", "user@example.com", "Jane Doe", "fr"); err != nil {
+		t.Fatalf("SendAdminNewRegistrationEmail returned error: %v", err)
+	}
+
+	out := buf.String()
+	for _, want := range []string{
+		"event=mail.admin_registration_send_start",
+		"request_id=req-123",
+		"recipient=admin@example.com",
+		"language=fr",
+		"event=mail.admin_registration_send_success",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("log output missing %q: %s", want, out)
+		}
+	}
+	for _, leak := range []string{"token=", "password=", "verify-email?token="} {
+		if strings.Contains(out, leak) {
+			t.Fatalf("log output leaked %q: %s", leak, out)
+		}
+	}
+}
+
+func TestSendAdminNewRegistrationEmailWithoutSMTPLogsOnly(t *testing.T) {
+	var buf bytes.Buffer
+	oldFlags := log.Flags()
+	oldPrefix := log.Prefix()
+	oldOutput := log.Writer()
+	t.Cleanup(func() {
+		log.SetFlags(oldFlags)
+		log.SetPrefix(oldPrefix)
+		log.SetOutput(oldOutput)
+	})
+	log.SetFlags(0)
+	log.SetPrefix("")
+	log.SetOutput(&buf)
+
+	m := &Mailer{cfg: &config.Config{AppPublicURL: "https://app.example"}}
+	if err := m.SendAdminNewRegistrationEmail("req-456", "admin@example.com", "user@example.com", "Jane Doe", "system"); err != nil {
+		t.Fatalf("SendAdminNewRegistrationEmail returned error: %v", err)
+	}
+
+	out := buf.String()
+	for _, want := range []string{
+		"event=mail.admin_registration_send_start",
+		"language=en",
+		"configured=false",
+		"transport=log_only",
+		"event=mail.admin_registration_send_success",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("log output missing %q: %s", want, out)
+		}
+	}
+}
+
+func TestSendAdminNewRegistrationEmailLogsErrors(t *testing.T) {
+	var buf bytes.Buffer
+	oldFlags := log.Flags()
+	oldPrefix := log.Prefix()
+	oldOutput := log.Writer()
+	t.Cleanup(func() {
+		log.SetFlags(oldFlags)
+		log.SetPrefix(oldPrefix)
+		log.SetOutput(oldOutput)
+	})
+	log.SetFlags(0)
+	log.SetPrefix("")
+	log.SetOutput(&buf)
+
+	m := &Mailer{
+		cfg: &config.Config{
+			SMTPHost:     "smtp.internal",
+			SMTPPort:     "25",
+			SMTPFrom:     "noreply@kareelio.test",
+			AppPublicURL: "https://app.example",
+		},
+	}
+	m.sendFunc = func(to, subject, body string) error {
+		return errors.New("smtp broken")
+	}
+
+	if err := m.SendAdminNewRegistrationEmail("req-789", "admin@example.com", "user@example.com", "Jane Doe", "en"); err == nil {
+		t.Fatal("expected error")
+	}
+
+	out := buf.String()
+	for _, want := range []string{
+		"event=mail.admin_registration_send_start",
+		"event=mail.admin_registration_send_error",
+		"error=smtp broken",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("log output missing %q: %s", want, out)
+		}
+	}
+}
+
 type fakeSMTPClient struct {
 	authErr  error
 	mailErr  error

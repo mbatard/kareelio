@@ -2,180 +2,150 @@
 
 ## Objective
 
-Improve observability and email-verification operations for Kareelio so that account registration, verification-email sending, resend actions, and admin user operations produce explicit, safe frontend/backend logs and actionable errors, and add an admin capability to force-resend a user creation/verification email.
+Notify the administrator when a new user registers: send an admin email notification to the valid active admin account email, and show an in-app admin notification badge whose count increments with newly registered users until acknowledged.
 
 ## Constraints
 
 - Protected `main`: feature branch + PR only; no direct pushes to `main`.
-- Do not expose secrets, SMTP credentials, session IDs, verification tokens, password values, CSRF values, or raw request bodies in logs.
-- Logs may include request ID, route/action, status, duration, user ID, target user ID, and normalized email only where already visible to the acting user/admin; avoid logging verification links in production.
-- Preserve generic public registration responses where needed to avoid account enumeration, while logging internal failure reasons server-side.
-- Keep changes incremental and reversible.
-- Frontend logs should be useful during debugging but must not leak passwords, tokens, or private form contents.
-- Admin resend endpoint must remain admin-only, protected by existing auth/CSRF middleware, and must not allow public token generation.
-- SMTP changes must support the reported self-hosted unauthenticated SMTP path (`SMTP_HOST` + `SMTP_PORT=25` + `SMTP_FROM`) without requiring username/password.
-- Kubernetes/Docker/config changes must include rollout impact, validation, and rollback.
+- Planning only modified `PLAN.md`; implementation must start from a clean worktree/branch based on `origin/main`.
+- Do not expose secrets, SMTP credentials, passwords, session IDs, CSRF values, verification tokens, or raw request bodies in logs or emails.
+- Public registration responses must remain generic/non-blocking enough to avoid account enumeration and poor UX.
+- Admin notification email must be skipped if the active admin email is invalid or local/dev-only, especially `@kareelio.local`.
+- Do not introduce plaintext secrets; use existing SMTP env vars/Kubernetes secrets only.
+- Web notification endpoints must be admin-only behind existing auth + CSRF middleware.
+- Prefer small, reversible, testable steps.
+- Any database migration must be additive/idempotent where practical, with rollout and rollback documented.
+- Kubernetes/Docker config changes are not expected; if implementation discovers they are needed, include dry-run/diff validation and rollback before applying.
 
 ## Current State
 
-- Backend request logging emits method/path/status/duration/request ID in `backend/internal/middleware/middleware.go`, e.g. `POST /api/auth/register`, and now excludes `/api/healthz` and `/api/readyz` probe traffic.
-- `AuthHandler.Register` now emits structured lifecycle/error logs and records mail-send success/failure context while keeping the public response generic on internal failures.
-- `AuthHandler.ResendVerification` now emits structured lifecycle/error logs and records mail-send success/failure context while keeping the public response generic on internal failures.
-- Public registration and public verification resend now queue verification-email delivery asynchronously so SMTP greeting/connect/send latency does not delay the user-facing success response; admin forced resend remains synchronous so admins still see actionable mail failures.
-- Public login, registration, and email-verification pages now expose the same language/theme toggles as the authenticated navbar, and registration sends the resolved language to the backend.
-- Verification emails now use the user's selected/stored language for the subject and body; invalid or `system` mail language values fall back to English.
-- `mailer.SendVerificationEmail` now logs safe send start/success/error events and avoids leaking verification tokens or full links in logs.
-- `mailer.send` now uses an explicit SMTP client flow with request timeouts, supports unauthenticated SMTP when username/password are empty, and returns phase-specific errors for connect/starttls/auth/sender/recipient/data/quit failures.
-- `.env.example` documents SMTP defaults for the unauthenticated relay path as `SMTP_PORT=25`; `docker-compose.yml` defaults `SMTP_PORT` to `25`; production `deploy/k8s/configmap.yaml` now sets `SMTP_PORT: "25"` and `SMTP_FROM`, while `SMTP_HOST` comes from `kareelio-secret` if configured and `SMTP_USERNAME`/`SMTP_PASSWORD` can be left empty for unauthenticated relay.
-- For a self-hosted relay on port 25, the backend must actually receive `SMTP_PORT=25`; frontend pod connectivity does not prove backend pod SMTP config or delivery path.
-- Backend now emits an explicit SMTP startup/config summary log.
-- Backend now emits a safe data-encryption startup/config summary log without exposing encryption key values.
-- Frontend `frontend/src/services/api.ts` now has env-gated safe axios request/success/error logs that emit action names, HTTP status, and backend request IDs when available.
-- `RegisterPage` now logs submit start/success/error without exposing passwords or tokens.
-- Frontend Nginx now exposes dedicated `/healthz` and `/readyz` endpoints with access logs disabled for probe traffic.
-- Admin user management exists in `AdminUsersPage` and `AdminUserEditPage`; admin can create/edit/delete users, reset passwords, and resend verification for unverified non-admin users from the list and edit pages.
-- Backend now exposes `POST /api/users/{id}/resend-verification` for admin-only forced verification-email resend on unverified non-admin users.
-- Admin-created users currently go through `UserHandler.Create`, which creates an active user but does not create or send an email-verification token.
-- Public resend endpoint `/api/auth/resend-verification` exists for unverified users by email; admin resend is available for selected unverified non-admin users.
-- Cluster diagnostics for image `sha-d79c4b3` confirmed backend/frontend pods were using the expected image digests, but `DATA_ENCRYPTION_KEY`, `DATA_ENCRYPTION_KEY_ID`, and `JOB_APPLICATIONS_REQUIRE_ENCRYPTED_READS` were missing from the live backend environment.
-- `.env.example`, `docker-compose.yml`, and `deploy/k8s/secret.example.yaml` now document/pass job application encryption settings so operators can align runtime env with the manifests.
-- The About page now displays the application version injected into the backend image at build time and no longer displays the Go version.
-- Audit actions already include `email_verification_resent`; audit UI translations exist for that action.
-- Existing pending local changes include previous DB-encryption work and opencode model config changes; keep this new plan separate and do not implement code during planning.
+- `origin/main` is currently at `46cb28c` / tag `v1.3.0`; PR #46 for localized verification emails has been merged.
+- The primary worktree `/Users/mikael/kareelio` is still on an old dirty branch (`fix/applications-status-colors`) with many pending changes. Implementation should not use it directly; use a clean feature branch/worktree from `origin/main`.
+- Backend public registration lives in `backend/internal/handler/auth.go` and logs/audits `model.AuditActionUserRegistered` after creating the user and verification token.
+- Public verification email delivery is asynchronous for registration/public resend; admin forced resend remains synchronous.
+- `mailer.Mailer` currently supports localized verification emails via `SendVerificationEmail(requestID, to, token, language)` and safe SMTP logs.
+- Admin account is stored as a normal `users` row with `role='admin'`; `database.SeedAdmin` creates the default admin from `DEFAULT_ADMIN_EMAIL`, whose fallback is `admin@kareelio.local`.
+- `UserRepository` can list users and get users by ID/email, and now has a helper to fetch the active admin contact.
+- Admin notification email delivery now exists in the feature worktree, but there is still no frontend badge.
+- `admin_notification_state` storage, repository helpers, and the admin notification API now exist in the feature worktree: per-admin ack state is persisted, counts/ack can be driven from audit events, and admin-only GET/POST routes expose the notification summary and acknowledgement.
+- Admin routes are grouped under `RequireRole(model.RoleAdmin)` in `backend/internal/router/router.go`; examples: `/api/admin/dashboard`, `/api/admin/audit`, and `/api/users`.
+- Existing audit events include `user_registered`, so unread counts can be derived from audit events if a per-admin acknowledgement marker is stored.
+- Frontend admin navigation is in `frontend/src/components/Navbar.tsx`; the Admin Users link now shows an unread-count badge for admin users.
+- Frontend admin API helpers are in `frontend/src/services/api.ts`; notification summary/ack helpers now exist.
+- `AdminUsersPage` already loads users and is a natural place to acknowledge new-user notifications when the admin views the user list.
+- No Docker/Kubernetes manifest change appears necessary for this feature if existing SMTP config is reused.
 
 ## Tasks
 
-- [x] Add safe structured backend action/error logs for auth and mail paths.
-  - Add explicit logs for `register.start`, `register.user_created`, `register.token_created`, `mail.verification_send_start`, `mail.verification_send_success`, `mail.verification_send_error`, `register.completed`, and analogous `resend_verification.*` events.
-  - Include request ID and safe identifiers where available; never log password, SMTP password, verification token, or full verification URL.
-  - Stop silently swallowing `SendVerificationEmail` errors: log them with context and keep public responses generic where account enumeration protection is required.
-  - Add a startup/config summary log for SMTP with host present/absent, port, from present/absent, auth enabled/disabled, and TLS mode; never log SMTP credentials.
-  - Add targeted Go tests for mailer/config/log helper behavior where practical.
-  - Findings: backend now emits request-scoped auth/mail event logs, SMTP startup summary logs, and mailer send success/error logs without leaking tokens or credentials; verified with `go test ./...` and `go build ./...` in `backend/`.
+- [x] Add backend notification state storage and repository helpers.
+  - Add an additive migration, e.g. `009_create_admin_notification_state.up.sql`, for per-admin notification acknowledgement state.
+  - Recommended table: `admin_notification_state(admin_user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, user_registrations_seen_at TIMESTAMPTZ NOT NULL DEFAULT 'epoch', updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`.
+  - Add repository methods to count unacknowledged public registration audit events (`action='user_registered'`, `target_type='user'`) created after the admin's `seen_at`, and to acknowledge current registrations for the acting admin.
+  - Keep the migration additive and reversible via a matching `.down.sql` dropping only the new table.
+  - Add targeted repository tests where practical; otherwise cover counting/ack behavior via handler tests with fakes.
+  - Findings: added `admin_notification_state` with per-admin `user_registrations_seen_at`, implemented repository helpers to count public `user_registered` audits since the last ack and upsert the ack timestamp, and validated the migration on a disposable local PostgreSQL via Docker Compose. Verified with `go test ./internal/repository`, `go test ./...`, and `go build ./...`.
 
-- [x] Fix and harden SMTP sending diagnostics for self-hosted unauthenticated relay.
-  - Verify support for `SMTP_HOST` + `SMTP_PORT=25` + `SMTP_FROM` without auth.
-  - Add explicit connection/send phase errors so operators can distinguish DNS/connect, STARTTLS/TLS, sender, recipient, and DATA failures.
-  - Consider adding `SMTP_TIMEOUT_SECONDS` with a safe default if the current `net/smtp.SendMail` path can hang or hide connection timing.
-  - Validate locally with a disposable SMTP capture service, e.g. Mailpit/MailHog, without committing real SMTP secrets.
-  - Findings: backend now uses an explicit SMTP client flow with request-timeout support, phase-specific errors (`smtp connect`, `smtp starttls`, `smtp sender`, `smtp recipient`, `smtp data`, etc.), and a local disposable SMTP capture test that confirms unauthenticated port-25 delivery works without leaking verification tokens. Verified with `go test ./...` and `go build ./...` in `backend/`.
+- [x] Add backend admin notification API.
+  - Add admin-only routes, e.g. `GET /api/admin/notifications` and `POST /api/admin/notifications/user-registrations/ack`.
+  - Response shape recommendation: `{ "new_user_registrations": number }`.
+  - Use the authenticated admin user from context for per-admin state.
+  - Require auth/admin/CSRF through the existing admin route group.
+  - Add safe logs for notification count/ack actions without listing all user emails.
+  - Add targeted handler tests for admin count, ack, unauthenticated/non-admin denial where feasible.
+  - Findings: added `GET /api/admin/notifications` returning `{ "new_user_registrations": number }`, `POST /api/admin/notifications/user-registrations/ack` returning 204, safe log events for count/ack, handler tests for success/error/unauthorized cases, and middleware coverage confirming `RequireRole(model.RoleAdmin)` blocks non-admin access.
 
-- [x] Align local and production SMTP configuration examples.
-  - Update `.env.example`, `docker-compose.yml`, `deploy/k8s/configmap.yaml`, and/or `deploy/k8s/secret.example.yaml` only as needed to make unauthenticated port-25 relay configuration clear.
-  - Decide whether production `SMTP_PORT` should be changed from `587` to `25` based on the user-provided self-hosted relay setup.
-  - For K8s changes, include rollout impact, dry-run validation, and rollback commands.
-  - Findings: examples and production config now default to `SMTP_PORT=25`, with unauthenticated relay clearly documented in `.env.example`, `docker-compose.yml`, and `deploy/k8s/secret.example.yaml`. Verified with `docker compose config`; `kubectl` is not installed in this environment, so Kubernetes dry-run validation could not be executed here.
+- [x] Send admin email notification after public registration.
+  - Add a mailer method such as `SendAdminNewRegistrationEmail(requestID, adminEmail, registeredUserEmail, registeredDisplayName, language)`.
+  - Fetch the active admin user email from the database at registration time or via a small admin-email repository method.
+  - Validate admin email with existing email validation and skip if invalid or dev/local-only (`@kareelio.local`, optionally any `.local` domain).
+  - Email content must not include passwords, verification tokens, session IDs, or raw request payloads; include only safe fields such as registered user email/display name and a link to `/admin/users`.
+  - Send asynchronously so public registration latency stays low; log success/skip/error with request ID and safe reason.
+  - Add tests for valid admin email send, invalid/local admin email skip, SMTP error logging, and no token/password leakage.
+  - Findings: added `UserRepository.GetActiveAdmin`, `Mailer.SendAdminNewRegistrationEmail`, and an async registration hook that looks up the active admin, skips invalid/local admin addresses, and logs safe queue/skip/error/completion events. Added tests covering valid delivery, local admin skip, SMTP errors, and no token/password leakage in both mail content and logs. Verified with `go test ./internal/mailer ./internal/handler ./internal/repository`, `go test ./...`, and `go build ./...`.
 
-- [x] Add safe frontend action/error logs around API calls and registration UI.
-  - Add opt-in or environment-gated frontend logging to `frontend/src/services/api.ts` so request start/success/error can be correlated with backend request IDs when available.
-  - Log action names and HTTP status only; never log passwords, tokens, request bodies, cookies, or raw auth headers.
-  - Add explicit register page logs for submit start/success/error, again without logging password/token.
-  - Keep user-facing UI behavior unchanged unless a backend error should now be surfaced more clearly.
-  - Findings: frontend now emits env-gated safe API lifecycle logs keyed by action names and request IDs, plus register submit lifecycle logs without leaking passwords/tokens. Verified with `npm run lint` and `npm run build` in `frontend/`.
+- [x] Add frontend admin notification badge.
+  - Extend `frontend/src/types/index.ts` and `adminApi` in `frontend/src/services/api.ts` for notification summary and ack endpoints.
+  - Update `Navbar` so admin users see a badge on/near the Admin Users navigation item when `new_user_registrations > 0`.
+  - Fetch the summary when an admin session is active and refresh periodically with a modest interval (recommended 60s) rather than websockets for this first iteration.
+  - Acknowledge/reset the badge when the admin opens `/admin/users` or clicks the Admin Users link, then refresh the count.
+  - Add loading/error handling that fails quietly; notification failures must not block navigation.
+  - Add i18n keys in both `fr.json` and `en.json` if labels/tooltips/accessibility text are introduced.
+  - Findings: added `AdminNotificationSummary`, `adminApi.notificationSummary()` and `adminApi.acknowledgeUserRegistrations()`, updated `Navbar` to poll every 60s, display an admin-only badge, and acknowledge/reset on `/admin/users`, and added accessible badge labels in both locales. Verified with `npm ci`, `npm run lint`, `npm run build`, and `npm audit --audit-level=high` (audit still reports pre-existing moderate `react-router` advisories only).
 
-- [x] Add backend admin endpoint to force resend a verification/user-creation email.
-  - Add an admin-only route such as `POST /api/users/{id}/resend-verification` under existing authenticated/admin/CSRF-protected routes.
-  - For non-admin target users only, delete existing verification tokens for the target user, create a new token, send the verification email, and audit `email_verification_resent` with target user metadata.
-  - Decide behavior for already verified users: recommended first behavior is return `409 Conflict` or `400 Bad Request` and log a safe reason rather than sending a new token.
-  - Return actionable admin-facing errors on mail send failure, while avoiding token exposure.
-  - Add targeted Go tests for success, already-verified user, missing user, and mail send error if handler dependencies can be tested with fakes; otherwise document test limitations.
-  - Findings: backend now exposes an admin-only resend endpoint that blocks already-verified/admin targets, regenerates verification tokens for unverified users, sends the mail, and audits `email_verification_resent`. Verified with `go test ./...` and `go build ./...` in `backend/`.
+- [x] Validate end-to-end behavior locally.
+  - Use a disposable SMTP capture service; do not use real production SMTP credentials.
+  - Register a new user with a valid active admin email and verify: user verification email sent, admin notification email sent, badge increments for logged-in admin.
+  - Verify no admin notification email is sent when active admin email is `admin@kareelio.local` or otherwise invalid/local-only; logs should show a safe skip reason.
+  - Verify badge resets only after admin acknowledgement and remains admin-only.
+  - Verify public registration response remains fast and generic.
+  - Findings: validated against a disposable local PostgreSQL + custom SMTP capture server with a local backend process. Confirmed first registration sent both verification and admin notification emails, duplicate registration returned the generic fallback response, unread count progressed 1 → 2 → 0 after acknowledgement, admin notification email was skipped after switching the active admin to `admin@kareelio.local`, backend logs recorded the safe skip reason, and a regular user received 403 from the admin notifications API. Frontend badge behavior was also covered with a focused `Navbar` component test, and `npm run lint`, `npx vitest run src/components/Navbar.test.tsx`, `npm run build`, and `npm audit --audit-level=high` were run in the frontend worktree.
 
-- [x] Add frontend admin UI for force resend.
-  - Extend `userApi` with `resendVerification(id)`.
-  - Add a button in `AdminUsersPage` and/or `AdminUserEditPage` for unverified non-admin users.
-  - Show loading/success/error states and refresh user data after success.
-  - Add i18n keys in both `fr.json` and `en.json`.
-  - Findings: frontend admin edit page now exposes an unverified-user resend action with loading/success/error states, refreshes the user record after success, and uses new i18n keys in both locales. Verified with `npm run lint` and `npm run build` in `frontend/`.
-
-- [x] Validate end-to-end mail flow in local/dev and production-safe rollout.
-  - Local: run backend against a disposable SMTP capture service and verify logs show send start/success without sensitive token values.
-  - Backend: `cd backend && go test ./... && go build ./...`.
-  - Frontend: `cd frontend && npm run lint && npm run build`.
-  - Docker/K8s if manifests change: `docker compose config`; `kubectl apply --dry-run=server -f deploy/k8s/`; `kubectl diff -f deploy/k8s/` where available.
-  - Production rollout: deploy backend/frontend images, verify `/api/auth/register`, public resend, and admin force resend against server-mail logs.
-  - Findings: local end-to-end validation succeeded with a disposable SMTP capture server and live backend against local PostgreSQL. Verified three mail flows (`/api/auth/register`, `/api/auth/resend-verification`, and admin `POST /api/users/{id}/resend-verification`) produced SMTP deliveries and request-scoped logs without leaking verification links in backend logs. `docker compose config`, `go test ./...`, `go build ./...`, `npm run lint`, and `npm run build` all passed; `kubectl` is not installed in this environment, so server-side Kubernetes dry-run/diff could not be executed here.
-
-- [x] Mask frontend Nginx live/ready probe logs.
-  - Add dedicated `/healthz` and `/readyz` endpoints in `frontend/nginx.conf` with `access_log off` so liveness/readiness probes do not spam access logs.
-  - Update the frontend Kubernetes probes to use the new probe endpoints instead of `/`.
-  - Findings: frontend probe traffic now returns `204` from Nginx without access-log spam, and the Kubernetes frontend probes now target `/healthz` and `/readyz`. Verified with `git diff --check`, `docker build -t kareelio-frontend-probe-test ./frontend`, and `docker compose up -d --build postgres backend frontend` followed by curl checks against `/healthz` and `/readyz`. `kubectl` is not installed in this environment, so server-side dry-run/diff could not be executed here.
-
-- [x] Add runtime diagnostics and operator fixes for missing backend behavior.
-  - Add safe backend startup diagnostics for data-encryption configuration and job application encryption flags, without logging key values or key IDs.
-  - Exclude backend `/api/healthz` and `/api/readyz` from request logs so registration/admin logs are not drowned by probe traffic.
-  - Document `DATA_ENCRYPTION_KEY_ID` and `DATA_ENCRYPTION_KEY` in Kubernetes secret examples, local env examples, and README operator guidance.
-  - Pass job application encryption env vars through Docker Compose for local parity.
-  - Add a resend verification action directly in `AdminUsersPage` for unverified non-admin users, reusing the existing admin endpoint/i18n keys.
-  - Findings: cluster outputs showed the deployed `sha-d79c4b3` images were correct, but live backend env was missing encryption keys and `JOB_APPLICATIONS_REQUIRE_ENCRYPTED_READS`; backend now logs those booleans at startup, examples document the required secret values, backend health probes no longer pollute request logs, and the resend action is visible in the admin user list. Verified with `go test ./...`, `go build ./...`, `npm ci`, `npm run lint`, `npm run build`, and `docker compose config`. `kubectl` is not installed in this environment, so server-side Kubernetes dry-run/diff could not be executed here.
-
-- [x] Update About page version display.
-  - Remove Go version from the `/api/about` response type and About UI.
-  - Replace the hardcoded backend version with a build-time `model.Version` value injected through backend Docker image builds.
-  - Pass `APP_VERSION` from GitHub Docker/Release workflows to the backend image build.
-  - Findings: About now reports the application release/build version instead of stale hardcoded `0.1.0`/Go `1.22`; local builds fall back to `dev`. Verified with backend/frontend builds and tests.
-
-- [x] Queue public verification emails asynchronously.
-  - Keep user/token creation synchronous, then queue verification email delivery after token persistence for public registration and public resend.
-  - Preserve safe request-scoped logs for queued/success/error outcomes without logging passwords, tokens, or verification links.
-  - Keep admin forced resend synchronous so a broken SMTP relay still returns an actionable admin-facing error.
-  - Findings: public registration/resend responses no longer wait for SMTP failures such as `421 4.3.2 No system resources`; SMTP failures remain visible in backend async logs. Verified with targeted handler tests plus backend test/build validation.
-
-- [x] Localize public auth pages and verification emails.
-  - Add public language/theme toggles on login, registration, and email-verification pages using the existing navbar visual style.
-  - Send the resolved registration language (`fr` or `en`) to the backend and persist it on the new user.
-  - Localize verification email subject/body from the user's selected/stored language for registration, public resend, and admin resend.
-  - Findings: the previous mail subject depended on `SMTP_FROM` and the body was bilingual; emails now use an explicit user language with English fallback for legacy `system` values.
+- [x] Prepare production rollout and rollback notes.
+  - No Kubernetes manifest changes are expected; if none are made, validate application builds/tests only plus standard deployment checks.
+  - If manifests/config change unexpectedly: run `kubectl apply --dry-run=server -f deploy/k8s/` and `kubectl diff -f deploy/k8s/` before rollout.
+  - For the DB migration, confirm it is additive and safe under rolling deployment: older pods should ignore the new table; newer pods require it after migration.
+  - Findings: no Kubernetes/Docker manifest changes were needed for this feature. Rollout can use the normal backend/frontend image deployment after the additive DB migration; rollback is the previous backend/frontend image tag, and if notification state must be removed the matching down migration only drops `admin_notification_state`.
 
 ## Validation
 
-- Backend targeted tests:
-  - `cd backend && go test ./internal/mailer/...` if mailer tests are added.
-  - `cd backend && go test ./internal/handler/...` if handler tests are added.
+- Backend targeted validation:
+  - `cd backend && go test ./internal/mailer ./internal/handler ./internal/repository`.
   - `cd backend && go test ./...`.
   - `cd backend && go build ./...`.
 - Frontend validation:
+  - `cd frontend && npm ci` if dependencies are not installed in the worktree.
   - `cd frontend && npm run lint`.
   - `cd frontend && npm run build`.
+  - `cd frontend && npm audit --audit-level=high`.
+- Migration validation:
+  - Ensure new `.up.sql` and `.down.sql` are idempotent/reversible where practical.
+  - Run local backend migrations against disposable PostgreSQL if available.
+  - Verify rollback down migration only removes notification state, not users/audit events.
 - SMTP validation:
-  - Use a local disposable SMTP capture service; do not use or commit real production SMTP credentials.
-  - Verify server logs include SMTP config summary, send start, success/error, and request ID/action context.
-  - Verify logs do not include verification tokens, full verification URLs, passwords, cookies, or request bodies.
-- Admin resend validation:
-  - As admin, resend for an unverified non-admin user and verify audit event + SMTP capture delivery.
-  - Verify resend is unavailable/fails safely for admin users and already verified users.
-  - Verify unauthenticated and non-admin users cannot call the endpoint.
-- Kubernetes/config validation if manifests change:
-  - `kubectl apply --dry-run=server -f deploy/k8s/` before apply.
-  - `kubectl diff -f deploy/k8s/` where available.
-  - Rollout check: `make deploy-status`, `make deploy-logs` after deployment.
+  - Use a local SMTP capture service to verify both verification emails and admin registration notification emails.
+  - Confirm admin notification emails are skipped for `@kareelio.local` and invalid admin emails.
+  - Confirm logs do not leak passwords, SMTP credentials, verification tokens, session IDs, cookies, or raw request bodies.
+- Admin web validation:
+  - As admin, create/register multiple users and verify badge count increments to 1, 2, etc.
+  - Visit `/admin/users` or click the badge/link and verify ack resets the count.
+  - Verify normal users cannot access notification APIs.
+- Kubernetes/production validation if manifests change:
+  - `kubectl apply --dry-run=server -f deploy/k8s/`.
+  - `kubectl diff -f deploy/k8s/`.
+  - After deployment: `make deploy-status` and `make deploy-logs`.
 
 ## Risks
 
-- Logging too much can leak emails, verification links, tokens, passwords, or other sensitive data.
-- Public registration must avoid account enumeration even while backend logs become more explicit.
-- Surfacing mail failures directly from public registration could expose operational state; prefer server logs and generic public response.
-- SMTP behavior differs by server: port 25 unauthenticated relay, STARTTLS on 587, implicit TLS on 465, sender policies, SPF/relay ACLs, and HELO requirements may fail differently.
-- Admin resend can be abused for email spam if not restricted/rate-limited/audited.
-- Frontend console logs may be visible to end users; keep them opt-in or non-sensitive.
-- K8s SMTP config changes can break verification email delivery if host/port/from are wrong.
+- Email notifications can leak personal data if too verbose; keep content minimal and safe.
+- Admin notification email delivery can fail due to SMTP issues; this must not block public registration.
+- Sending to default/dev admin addresses like `admin@kareelio.local` would create noise or bounces; validate and skip.
+- Badge counts can become confusing if based only on total users; use explicit acknowledgement state for newly registered users.
+- Multi-admin behavior needs clear semantics; per-admin acknowledgement is recommended to avoid one admin clearing another admin's badge.
+- Polling too frequently can add unnecessary backend load; use a modest interval.
+- Database migration bugs could affect startup if migrations run automatically; keep migration additive and simple.
+- If acknowledgement uses audit timestamps, clock/database precision edge cases should not double-count around the ack boundary.
 
 ## Rollback
 
-- Backend logging/mailer changes: revert the PR or redeploy the previous backend image tag.
-- Frontend logging/admin UI changes: revert the PR or redeploy the previous frontend image tag.
-- Admin resend endpoint: disable/hide frontend button by reverting frontend only, or revert backend endpoint if server behavior is problematic.
-- K8s config changes:
-  - Reapply previous ConfigMap/Secret values.
-  - Redeploy previous image/version with `make deploy VERSION=<previous>` if needed.
-  - Keep previous SMTP settings documented before changing production config.
-- If logs accidentally expose sensitive data, immediately stop affected pods/roll back, rotate exposed tokens/secrets as appropriate, and purge log retention where possible.
+- Application rollback: revert the PR or redeploy the previous backend/frontend image tag.
+- Frontend-only issue: hide/remove the badge and ack calls by reverting frontend changes; backend notification endpoints/table can remain unused temporarily.
+- Admin email issue: revert mailer/registration notification changes or disable by making admin email invalid/local-only as an emergency operational workaround, while keeping user verification email intact.
+- Database rollback:
+  - If no production data in notification state needs preservation, run the matching down migration to drop only `admin_notification_state`.
+  - Otherwise leave the additive table in place and roll back application images; old images should ignore the table.
+- Kubernetes rollback if manifests change:
+  - Reapply previous ConfigMap/Secret/manifests.
+  - Redeploy previous version with `make deploy VERSION=<previous>`.
 
 ## Notes / Decisions
 
-- Assumption: the desired mail flow is verification email on public signup and admin-forced resend for unverified users.
-- Assumption: the self-hosted SMTP relay should work without SMTP username/password when traffic originates from allowed pod/node IPs.
-- Resolved: production should use `SMTP_PORT=25` in `deploy/k8s/configmap.yaml` for the self-hosted unauthenticated relay path.
-- Unresolved: confirm whether admin-created users should also receive a verification email automatically, or whether only the new admin force-resend action is required.
-- Unresolved: choose frontend logging gate (`import.meta.env.DEV`, `VITE_DEBUG_LOGS=true`, or always log safe action/status lines).
-- First `/next` task for `platform-build`: add safe structured backend logs for registration, public resend, and mailer send start/success/error paths, including SMTP config summary, without changing SMTP behavior or adding the admin resend endpoint yet.
+- Decision: treat the badge count as unacknowledged **public user registrations**, not total users and not admin-created users.
+- Decision: store notification acknowledgement per admin user.
+- Decision: acknowledge the badge when the admin opens/clicks Admin Users, unless implementation discovers a better explicit UI action is needed.
+- Decision: use existing SMTP configuration; do not add new secrets for this feature.
+- Decision: send admin notification email asynchronously and skip invalid/local admin emails.
+- Assumption: there is only one active admin in normal production, but the implementation should support multiple active admins safely.
+- Assumption: the active admin row email is the target notification email; `DEFAULT_ADMIN_EMAIL` is only a seed value and should not be the runtime source if the admin profile has changed.
+- Unresolved: exact French/English wording of the admin notification email subject/body; start with concise bilingual-safe text or use admin stored language if available.
+- Unresolved: whether acknowledgement should happen automatically on `/admin/users` load or require an explicit click; recommended first behavior is automatic ack on `/admin/users` because it is simple and reversible.
+- Next `/next` task for `platform-build`: none; the feature work is complete and only documentation/PR hygiene remains.

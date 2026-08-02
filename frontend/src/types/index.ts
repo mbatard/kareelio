@@ -105,6 +105,10 @@ export interface AdminDashboard {
   by_priority: Record<string, number>;
 }
 
+export interface AdminNotificationSummary {
+  new_user_registrations: number;
+}
+
 export interface AuditEvent {
   id: string;
   actor_user_id: string | null;
