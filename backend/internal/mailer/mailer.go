@@ -106,6 +106,31 @@ func (m *Mailer) SendVerificationEmail(requestID, to, token, language string) er
 	return nil
 }
 
+func (m *Mailer) SendAdminNewRegistrationEmail(requestID, adminEmail, registeredUserEmail, registeredDisplayName, language string) error {
+	language = normalizeLanguage(language)
+	subject, body := m.adminNewRegistrationEmailContent(registeredUserEmail, registeredDisplayName, language)
+
+	if !m.IsConfigured() {
+		logMailEvent("mail.admin_registration_send_start", requestID, "recipient="+adminEmail, "language="+language, "configured=false", "transport=log_only")
+		logMailEvent("mail.admin_registration_send_success", requestID, "recipient="+adminEmail, "language="+language, "configured=false", "transport=log_only")
+		return nil
+	}
+
+	logMailEvent("mail.admin_registration_send_start", requestID, "recipient="+adminEmail, "language="+language, "configured=true", "transport="+m.transportMode())
+
+	send := m.sendFunc
+	if send == nil {
+		send = m.send
+	}
+	if err := send(adminEmail, subject, body); err != nil {
+		logMailEvent("mail.admin_registration_send_error", requestID, "recipient="+adminEmail, "language="+language, "error="+err.Error())
+		return err
+	}
+
+	logMailEvent("mail.admin_registration_send_success", requestID, "recipient="+adminEmail, "language="+language, "configured=true", "transport="+m.transportMode())
+	return nil
+}
+
 func (m *Mailer) verificationEmailContent(token, language string) (string, string) {
 	if language == "fr" {
 		return "Kareelio - Vérifiez votre adresse e-mail", fmt.Sprintf(`Bonjour,
@@ -138,6 +163,35 @@ If you did not create an account, you can ignore this email.
 
 ---
 Kareelio - Job Application Tracker`, m.cfg.AppPublicURL, token, m.cfg.VerificationTokenTTLHours)
+}
+
+func (m *Mailer) adminNewRegistrationEmailContent(registeredUserEmail, registeredDisplayName, language string) (string, string) {
+	adminUsersURL := strings.TrimRight(m.cfg.AppPublicURL, "/") + "/admin/users"
+	if language == "fr" {
+		return "Kareelio - Nouvel utilisateur inscrit", fmt.Sprintf(`Bonjour,
+
+Un nouvel utilisateur vient de s'inscrire sur Kareelio.
+
+Nom affiché : %s
+E-mail : %s
+
+Consultez la liste des utilisateurs : %s
+
+---
+Kareelio - Suivi de candidatures`, registeredDisplayName, registeredUserEmail, adminUsersURL)
+	}
+
+	return "Kareelio - New user registration", fmt.Sprintf(`Hello,
+
+A new user just registered on Kareelio.
+
+Display name: %s
+Email: %s
+
+View the users list: %s
+
+---
+Kareelio - Job Application Tracker`, registeredDisplayName, registeredUserEmail, adminUsersURL)
 }
 
 func normalizeLanguage(language string) string {

@@ -1,5 +1,5 @@
 import axios, { type InternalAxiosRequestConfig } from 'axios';
-import type { User, LoginRequest, RegisterRequest, UpdateProfileRequest, CreateUserRequest, UpdateUserRequest, JobApplication, CreateJobApplicationRequest, UpdateJobApplicationRequest, AboutInfo, AdminDashboard, AuditListResponse } from '../types';
+import type { User, LoginRequest, RegisterRequest, UpdateProfileRequest, CreateUserRequest, UpdateUserRequest, JobApplication, CreateJobApplicationRequest, UpdateJobApplicationRequest, AboutInfo, AdminDashboard, AdminNotificationSummary, AuditListResponse } from '../types';
 
 type LoggedRequestConfig = InternalAxiosRequestConfig & {
   metadata?: {
@@ -47,6 +47,8 @@ function resolveAction(method: string | undefined, path: string) {
   if (path === '/api/job-applications/import' && upper === 'POST') return 'job_applications.import';
   if (path === '/api/about' && upper === 'GET') return 'about.get';
   if (path === '/api/admin/dashboard' && upper === 'GET') return 'admin.dashboard';
+  if (path === '/api/admin/notifications' && upper === 'GET') return 'admin.notifications';
+  if (path === '/api/admin/notifications/user-registrations/ack' && upper === 'POST') return 'admin.notifications.ack';
   if (path === '/api/admin/audit' && upper === 'GET') return 'admin.audit';
   return 'api.unknown';
 }
@@ -234,6 +236,13 @@ export const adminApi = {
   dashboard: async (): Promise<AdminDashboard> => {
     const res = await api.get('/api/admin/dashboard');
     return res.data;
+  },
+  notificationSummary: async (): Promise<AdminNotificationSummary> => {
+    const res = await api.get('/api/admin/notifications');
+    return res.data;
+  },
+  acknowledgeUserRegistrations: async (): Promise<void> => {
+    await api.post('/api/admin/notifications/user-registrations/ack');
   },
   audit: async (limit = 100, offset = 0): Promise<AuditListResponse> => {
     const res = await api.get('/api/admin/audit', { params: { limit, offset } });

@@ -250,6 +250,8 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		TargetID:    user.ID,
 	})
 
+	sendAdminNewRegistrationEmailAsync(requestID, h.userRepo, h.mailer, user)
+
 	writeJSON(w, http.StatusCreated, map[string]string{"message": "account created, please verify your email"})
 }
 

@@ -7,6 +7,7 @@
       "admin": "Administration",
       "adminDashboard": "Dashboard",
       "adminUsers": "Utilisateurs",
+      "adminUsersBadge": "{{count}} nouvelles inscriptions",
       "audit": "Audit",
       "about": "À propos",
       "logout": "Déconnexion"
