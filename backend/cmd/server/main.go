@@ -11,6 +11,8 @@ import (
 
 	"github.com/user/kareelio/backend/internal/config"
 	"github.com/user/kareelio/backend/internal/database"
+	"github.com/user/kareelio/backend/internal/encryption"
+	"github.com/user/kareelio/backend/internal/mailer"
 	"github.com/user/kareelio/backend/internal/repository"
 	"github.com/user/kareelio/backend/internal/router"
 	"golang.org/x/crypto/bcrypt"
@@ -18,6 +20,7 @@ import (
 
 func main() {
 	cfg := config.Load()
+	mailer.LogSMTPConfigSummary(cfg)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -32,6 +35,39 @@ func main() {
 		if err := database.RunMigrations(ctx, pool); err != nil {
 			log.Fatalf("Failed to run migrations: %v", err)
 		}
+	}
+
+	var dataEnc *encryption.Manager
+	log.Printf("Data encryption config: data_encryption_configured=%t data_encryption_key_id_present=%t data_encryption_key_present=%t job_applications_require_encrypted_reads=%t job_applications_backfill=%t job_applications_backfill_dry_run=%t",
+		cfg.DataEncryptionKey != "" && cfg.DataEncryptionKeyID != "",
+		cfg.DataEncryptionKeyID != "",
+		cfg.DataEncryptionKey != "",
+		cfg.JobApplicationRequireEncryptedReads,
+		cfg.JobApplicationBackfill,
+		cfg.JobApplicationBackfillDryRun,
+	)
+	if cfg.DataEncryptionKey != "" || cfg.DataEncryptionKeyID != "" {
+		dataEnc, err = encryption.New(cfg.DataEncryptionKeyID, cfg.DataEncryptionKey)
+		if err != nil {
+			log.Fatalf("Failed to initialize data encryption: %v", err)
+		}
+	}
+	if cfg.JobApplicationRequireEncryptedReads && dataEnc == nil {
+		log.Fatalf("JOB_APPLICATIONS_REQUIRE_ENCRYPTED_READS requires DATA_ENCRYPTION_KEY")
+	}
+
+	if cfg.JobApplicationBackfill {
+		backfillRepo := repository.NewJobApplicationRepository(pool, dataEnc, false)
+		stats, err := backfillRepo.BackfillEncryptedColumns(ctx, cfg.JobApplicationBackfillDryRun)
+		if err != nil {
+			log.Fatalf("Failed to backfill job applications: %v", err)
+		}
+		if cfg.JobApplicationBackfillDryRun {
+			log.Printf("Job application backfill dry-run: %d candidate row(s)", stats.Candidates)
+		} else {
+			log.Printf("Job application backfill completed: %d updated row(s) out of %d candidate row(s)", stats.Updated, stats.Candidates)
+		}
+		return
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(cfg.DefaultAdminPassword), bcrypt.DefaultCost)
@@ -49,7 +85,7 @@ func main() {
 
 	_ = userRepo
 
-	r := router.New(pool, cfg)
+	r := router.New(pool, cfg, dataEnc)
 
 	addr := ":" + cfg.ServerPort
 	srv := &http.Server{

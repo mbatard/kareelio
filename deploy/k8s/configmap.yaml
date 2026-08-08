@@ -15,5 +15,7 @@ data:
   APP_PUBLIC_URL: "https://app.kareelio.fr"
   REGISTRATION_ENABLED: "true"
   VERIFICATION_TOKEN_TTL_HOURS: "24"
-  SMTP_PORT: "587"
+  JOB_APPLICATIONS_REQUIRE_ENCRYPTED_READS: "true"
+  # Port 25 matches the self-hosted unauthenticated relay path; change with rollout + dry-run validation.
+  SMTP_PORT: "25"
   SMTP_FROM: "noreply@kareelio.fr"

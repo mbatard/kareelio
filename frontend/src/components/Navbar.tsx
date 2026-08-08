@@ -1,16 +1,49 @@
-import { useState, useEffect, useRef } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
 import { ThemeToggle } from './Toggles';
 import { LanguageToggle } from './Toggles';
+import { adminApi } from '../services/api';
 
 export function Navbar() {
   const { user, logout, isAdmin } = useAuth();
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [adminNotificationCount, setAdminNotificationCount] = useState<number | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const adminNotificationRequestRef = useRef<Promise<void> | null>(null);
+
+  const loadAdminNotifications = useCallback(async () => {
+    if (!user || !isAdmin) return;
+    try {
+      const summary = await adminApi.notificationSummary();
+      setAdminNotificationCount(summary.new_user_registrations);
+    } catch {
+      // fail quietly
+    }
+  }, [isAdmin, user]);
+
+  const acknowledgeAdminNotifications = useCallback(() => {
+    if (!user || !isAdmin) return Promise.resolve();
+    if (adminNotificationRequestRef.current) return adminNotificationRequestRef.current;
+
+    adminNotificationRequestRef.current = (async () => {
+      try {
+        await adminApi.acknowledgeUserRegistrations();
+        setAdminNotificationCount(0);
+        await loadAdminNotifications();
+      } catch {
+        // fail quietly
+      } finally {
+        adminNotificationRequestRef.current = null;
+      }
+    })();
+
+    return adminNotificationRequestRef.current;
+  }, [isAdmin, loadAdminNotifications, user]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -28,6 +61,29 @@ export function Navbar() {
       document.removeEventListener('keydown', handleEscape);
     };
   }, []);
+
+  useEffect(() => {
+    if (!user || !isAdmin) {
+      setAdminNotificationCount(null);
+      return;
+    }
+
+    if (location.pathname !== '/admin/users') {
+      void loadAdminNotifications();
+    }
+    const interval = window.setInterval(() => {
+      void loadAdminNotifications();
+    }, 60000);
+
+    return () => window.clearInterval(interval);
+  }, [isAdmin, loadAdminNotifications, location.pathname, user]);
+
+  useEffect(() => {
+    if (!user || !isAdmin) return;
+    if (location.pathname === '/admin/users') {
+      void acknowledgeAdminNotifications();
+    }
+  }, [acknowledgeAdminNotifications, isAdmin, location.pathname, user]);
 
   const handleLogout = async () => {
     await logout();
@@ -60,8 +116,17 @@ export function Navbar() {
                 <Link to="/admin" className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400">
                   {t('nav.adminDashboard')}
                 </Link>
-                <Link to="/admin/users" className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400">
-                  {t('nav.adminUsers')}
+                <Link
+                  to="/admin/users"
+                  aria-label={adminNotificationCount && adminNotificationCount > 0 ? t('nav.adminUsersBadge', { count: adminNotificationCount }) : undefined}
+                  className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 inline-flex items-center gap-2"
+                >
+                  <span>{t('nav.adminUsers')}</span>
+                  {adminNotificationCount && adminNotificationCount > 0 ? (
+                    <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white" aria-hidden="true">
+                      {adminNotificationCount}
+                    </span>
+                  ) : null}
                 </Link>
                 <Link to="/admin/audit" className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400">
                   {t('nav.audit')}

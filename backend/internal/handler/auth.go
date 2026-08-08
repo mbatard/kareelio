@@ -1,15 +1,18 @@
 package handler
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/user/kareelio/backend/internal/config"
 	"github.com/user/kareelio/backend/internal/mailer"
 	"github.com/user/kareelio/backend/internal/middleware"
@@ -165,8 +168,10 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		Email       string `json:"email"`
 		Password    string `json:"password"`
 		DisplayName string `json:"display_name"`
+		Language    string `json:"language"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		logAuthEvent(r, "register.error", "stage=decode", "error=invalid request body")
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 		return
 	}
@@ -174,16 +179,19 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	req.Email = validation.NormalizeEmail(req.Email)
 
 	if req.Email == "" || req.Password == "" {
+		logAuthEvent(r, "register.error", "stage=validation", "reason=missing_email_or_password")
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "email and password are required"})
 		return
 	}
 
 	if !validation.IsValidEmail(req.Email) {
+		logAuthEvent(r, "register.error", "stage=validation", "email="+req.Email, "reason=invalid_email")
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid email address"})
 		return
 	}
 
 	if err := validation.ValidatePassword(req.Password); err != nil {
+		logAuthEvent(r, "register.error", "stage=validation", "email="+req.Email, "error="+err.Error())
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
@@ -191,32 +199,46 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	if req.DisplayName == "" {
 		req.DisplayName = req.Email
 	}
+	language := resolvePublicLanguage(req.Language, r.Header.Get("Accept-Language"))
+
+	requestID := r.Header.Get("X-Request-ID")
+	logAuthEvent(r, "register.start", "email="+req.Email, "language="+language)
 
 	createReq := model.CreateUserRequest{
 		Email:       req.Email,
 		Password:    req.Password,
 		DisplayName: req.DisplayName,
+		Language:    language,
 	}
 
 	user, err := h.userRepo.Create(r.Context(), createReq, model.RoleUser)
 	if err != nil {
+		logAuthEvent(r, "register.error", "stage=user_create", "email="+req.Email, "error="+err.Error())
+		logAuthEvent(r, "register.completed", "email="+req.Email, "status=generic_success", "mail_sent=false")
 		writeJSON(w, http.StatusOK, map[string]string{"message": "if the email can be registered, a verification email has been sent"})
 		return
 	}
+	logAuthEvent(r, "register.user_created", "user_id="+user.ID, "email="+user.Email, "language="+user.Language)
 
 	token, tokenHash, err := generateVerificationToken()
 	if err != nil {
+		logAuthEvent(r, "register.error", "stage=token_generate", "user_id="+user.ID, "email="+user.Email, "error="+err.Error())
+		logAuthEvent(r, "register.completed", "user_id="+user.ID, "email="+user.Email, "status=generic_success", "mail_sent=false")
 		writeJSON(w, http.StatusOK, map[string]string{"message": "if the email can be registered, a verification email has been sent"})
 		return
 	}
 
 	expiresAt := time.Now().Add(time.Duration(h.cfg.VerificationTokenTTLHours) * time.Hour)
 	if err := h.evRepo.Create(r.Context(), user.ID, tokenHash, expiresAt.UTC().Format(time.RFC3339)); err != nil {
+		logAuthEvent(r, "register.error", "stage=token_create", "user_id="+user.ID, "email="+user.Email, "error="+err.Error())
+		logAuthEvent(r, "register.completed", "user_id="+user.ID, "email="+user.Email, "status=generic_success", "mail_sent=false")
 		writeJSON(w, http.StatusOK, map[string]string{"message": "if the email can be registered, a verification email has been sent"})
 		return
 	}
+	logAuthEvent(r, "register.token_created", "user_id="+user.ID, "email="+user.Email, "expires_at="+expiresAt.UTC().Format(time.RFC3339))
 
-	_ = h.mailer.SendVerificationEmail(user.Email, token)
+	sendVerificationEmailAsync(requestID, "register", user.ID, user.Email, token, user.Language, h.mailer)
+	logAuthEvent(r, "register.completed", "user_id="+user.ID, "email="+user.Email, "mail_queued=true")
 
 	_ = h.auditRepo.Log(r.Context(), &model.AuditEvent{
 		ActorUserID: &user.ID,
@@ -227,6 +249,8 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		TargetType:  "user",
 		TargetID:    user.ID,
 	})
+
+	sendAdminNewRegistrationEmailAsync(requestID, h.userRepo, h.mailer, user)
 
 	writeJSON(w, http.StatusCreated, map[string]string{"message": "account created, please verify your email"})
 }
@@ -284,37 +308,52 @@ func (h *AuthHandler) ResendVerification(w http.ResponseWriter, r *http.Request)
 		Email string `json:"email"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		logAuthEvent(r, "resend_verification.error", "stage=decode", "error=invalid request body")
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 		return
 	}
 
 	req.Email = validation.NormalizeEmail(req.Email)
+	logAuthEvent(r, "resend_verification.start", "email="+req.Email)
 	if req.Email == "" {
+		logAuthEvent(r, "resend_verification.error", "stage=validation", "reason=empty_email")
+		logAuthEvent(r, "resend_verification.completed", "email=", "status=generic_success", "mail_sent=false")
 		writeJSON(w, http.StatusOK, map[string]string{"message": "if the email is registered and unverified, a verification email has been sent"})
 		return
 	}
 
 	user, err := h.userRepo.GetByEmail(r.Context(), req.Email)
 	if err != nil || user.EmailVerifiedAt != nil {
+		logAuthEvent(r, "resend_verification.error", "stage=user_lookup", "email="+req.Email, "reason=not_found_or_verified")
+		logAuthEvent(r, "resend_verification.completed", "email="+req.Email, "status=generic_success", "mail_sent=false")
 		writeJSON(w, http.StatusOK, map[string]string{"message": "if the email is registered and unverified, a verification email has been sent"})
 		return
 	}
+	logAuthEvent(r, "resend_verification.user_loaded", "user_id="+user.ID, "email="+user.Email)
 
-	_ = h.evRepo.DeleteForUser(r.Context(), user.ID)
+	if err := h.evRepo.DeleteForUser(r.Context(), user.ID); err != nil {
+		logAuthEvent(r, "resend_verification.error", "stage=token_delete", "user_id="+user.ID, "email="+user.Email, "error="+err.Error())
+	}
 
 	token, tokenHash, err := generateVerificationToken()
 	if err != nil {
+		logAuthEvent(r, "resend_verification.error", "stage=token_generate", "user_id="+user.ID, "email="+user.Email, "error="+err.Error())
+		logAuthEvent(r, "resend_verification.completed", "user_id="+user.ID, "email="+user.Email, "status=generic_success", "mail_sent=false")
 		writeJSON(w, http.StatusOK, map[string]string{"message": "if the email is registered and unverified, a verification email has been sent"})
 		return
 	}
 
 	expiresAt := time.Now().Add(time.Duration(h.cfg.VerificationTokenTTLHours) * time.Hour)
 	if err := h.evRepo.Create(r.Context(), user.ID, tokenHash, expiresAt.UTC().Format(time.RFC3339)); err != nil {
+		logAuthEvent(r, "resend_verification.error", "stage=token_create", "user_id="+user.ID, "email="+user.Email, "error="+err.Error())
+		logAuthEvent(r, "resend_verification.completed", "user_id="+user.ID, "email="+user.Email, "status=generic_success", "mail_sent=false")
 		writeJSON(w, http.StatusOK, map[string]string{"message": "if the email is registered and unverified, a verification email has been sent"})
 		return
 	}
+	logAuthEvent(r, "resend_verification.token_created", "user_id="+user.ID, "email="+user.Email, "expires_at="+expiresAt.UTC().Format(time.RFC3339))
 
-	_ = h.mailer.SendVerificationEmail(user.Email, token)
+	sendVerificationEmailAsync(r.Header.Get("X-Request-ID"), "resend_verification", user.ID, user.Email, token, user.Language, h.mailer)
+	logAuthEvent(r, "resend_verification.completed", "user_id="+user.ID, "email="+user.Email, "mail_queued=true")
 
 	_ = h.auditRepo.Log(r.Context(), &model.AuditEvent{
 		ActorUserID: &user.ID,
@@ -327,6 +366,11 @@ func (h *AuthHandler) ResendVerification(w http.ResponseWriter, r *http.Request)
 	})
 
 	writeJSON(w, http.StatusOK, map[string]string{"message": "if the email is registered and unverified, a verification email has been sent"})
+}
+
+func (h *AuthHandler) AdminResendVerification(w http.ResponseWriter, r *http.Request) {
+	status, payload := adminResendVerification(r, h.userRepo, h.evRepo, h.mailer, h.auditRepo, h.cfg.VerificationTokenTTLHours)
+	writeJSON(w, status, payload)
 }
 
 func generateVerificationToken() (string, string, error) {
@@ -343,4 +387,168 @@ func generateVerificationToken() (string, string, error) {
 func hashToken(token string) string {
 	h := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(h[:])
+}
+
+type userLookup interface {
+	GetByID(context.Context, string) (*model.User, error)
+}
+
+type verificationTokenStore interface {
+	DeleteForUser(context.Context, string) error
+	Create(context.Context, string, string, string) error
+}
+
+type verificationMailer interface {
+	SendVerificationEmail(requestID, to, token, language string) error
+}
+
+type auditLogger interface {
+	Log(context.Context, *model.AuditEvent) error
+}
+
+func sendVerificationEmailAsync(requestID, eventPrefix, userID, email, token, language string, mailer verificationMailer) {
+	language = resolveMailLanguage(language)
+	logAuthEventByRequestID(requestID, eventPrefix+".mail_send_queued", "user_id="+userID, "email="+email, "language="+language)
+	go func() {
+		if err := mailer.SendVerificationEmail(requestID, email, token, language); err != nil {
+			logAuthEventByRequestID(requestID, eventPrefix+".error", "stage=mail_send", "user_id="+userID, "email="+email, "language="+language, "error="+err.Error())
+			logAuthEventByRequestID(requestID, eventPrefix+".mail_send_completed", "user_id="+userID, "email="+email, "language="+language, "mail_sent=false")
+			return
+		}
+		logAuthEventByRequestID(requestID, eventPrefix+".mail_send_completed", "user_id="+userID, "email="+email, "language="+language, "mail_sent=true")
+	}()
+}
+
+func resolvePublicLanguage(requested, acceptLanguage string) string {
+	if requested == "fr" || requested == "en" {
+		return requested
+	}
+	for _, lang := range strings.Split(acceptLanguage, ",") {
+		code := strings.ToLower(strings.TrimSpace(strings.SplitN(lang, ";", 2)[0]))
+		if strings.HasPrefix(code, "fr") {
+			return "fr"
+		}
+		if strings.HasPrefix(code, "en") {
+			return "en"
+		}
+	}
+	return "en"
+}
+
+func resolveMailLanguage(language string) string {
+	if language == "fr" {
+		return "fr"
+	}
+	return "en"
+}
+
+func adminResendVerification(r *http.Request, userRepo userLookup, evRepo verificationTokenStore, mailer verificationMailer, auditRepo auditLogger, ttlHours int) (int, map[string]string) {
+	requestID := r.Header.Get("X-Request-ID")
+	targetID := chi.URLParam(r, "id")
+	actor := middleware.GetUserFromContext(r.Context())
+	clientIP := middleware.ClientIP(r)
+
+	logAdminResendEvent(requestID, "admin_resend_verification.start", "target_user_id="+targetID)
+
+	target, err := userRepo.GetByID(r.Context(), targetID)
+	if err != nil {
+		logAdminResendEvent(requestID, "admin_resend_verification.error", "target_user_id="+targetID, "stage=user_lookup", "reason=not_found")
+		return http.StatusNotFound, map[string]string{"error": "user not found"}
+	}
+	if target.Role == model.RoleAdmin {
+		logAdminResendEvent(requestID, "admin_resend_verification.error", "target_user_id="+target.ID, "target_email="+target.Email, "stage=user_lookup", "reason=admin_user")
+		return http.StatusForbidden, map[string]string{"error": "cannot resend verification for admin user"}
+	}
+	if target.EmailVerifiedAt != nil {
+		logAdminResendEvent(requestID, "admin_resend_verification.error", "target_user_id="+target.ID, "target_email="+target.Email, "stage=user_lookup", "reason=already_verified")
+		return http.StatusConflict, map[string]string{"error": "user already verified"}
+	}
+
+	if err := evRepo.DeleteForUser(r.Context(), target.ID); err != nil {
+		logAdminResendEvent(requestID, "admin_resend_verification.error", "target_user_id="+target.ID, "target_email="+target.Email, "stage=token_delete", "error="+err.Error())
+		return http.StatusInternalServerError, map[string]string{"error": "unable to reset verification token"}
+	}
+
+	token, tokenHash, err := generateVerificationToken()
+	if err != nil {
+		logAdminResendEvent(requestID, "admin_resend_verification.error", "target_user_id="+target.ID, "target_email="+target.Email, "stage=token_generate", "error="+err.Error())
+		return http.StatusInternalServerError, map[string]string{"error": "unable to generate verification token"}
+	}
+
+	expiresAt := time.Now().Add(time.Duration(ttlHours) * time.Hour)
+	if err := evRepo.Create(r.Context(), target.ID, tokenHash, expiresAt.UTC().Format(time.RFC3339)); err != nil {
+		logAdminResendEvent(requestID, "admin_resend_verification.error", "target_user_id="+target.ID, "target_email="+target.Email, "stage=token_create", "error="+err.Error())
+		return http.StatusInternalServerError, map[string]string{"error": "unable to store verification token"}
+	}
+
+	logAdminResendEvent(requestID, "admin_resend_verification.token_created", "target_user_id="+target.ID, "target_email="+target.Email, "expires_at="+expiresAt.UTC().Format(time.RFC3339))
+
+	if err := mailer.SendVerificationEmail(requestID, target.Email, token, resolveMailLanguage(target.Language)); err != nil {
+		logAdminResendEvent(requestID, "admin_resend_verification.error", "target_user_id="+target.ID, "target_email="+target.Email, "stage=mail_send", "error="+err.Error())
+		return http.StatusBadGateway, map[string]string{"error": "unable to send verification email"}
+	}
+
+	if err := auditRepo.Log(r.Context(), &model.AuditEvent{
+		ActorUserID: actorID(actor),
+		ActorEmail:  actorEmail(actor),
+		ActorRole:   actorRole(actor),
+		ActorIP:     clientIP,
+		Action:      model.AuditActionEmailVerificationResent,
+		TargetType:  "user",
+		TargetID:    target.ID,
+		Metadata:    repository.MetadataJSON(map[string]any{"target_email": target.Email}),
+	}); err != nil {
+		logAdminResendEvent(requestID, "admin_resend_verification.error", "target_user_id="+target.ID, "target_email="+target.Email, "stage=audit", "error="+err.Error())
+	}
+
+	logAdminResendEvent(requestID, "admin_resend_verification.completed", "target_user_id="+target.ID, "target_email="+target.Email, "mail_sent=true")
+	return http.StatusOK, map[string]string{"message": "verification email sent"}
+}
+
+func actorID(user *model.User) *string {
+	if user == nil {
+		return nil
+	}
+	return &user.ID
+}
+
+func actorEmail(user *model.User) string {
+	if user == nil {
+		return "system"
+	}
+	return user.Email
+}
+
+func actorRole(user *model.User) string {
+	if user == nil {
+		return "system"
+	}
+	return string(user.Role)
+}
+
+func logAdminResendEvent(requestID, event string, fields ...string) {
+	parts := []string{"event=" + event}
+	if requestID != "" {
+		parts = append(parts, "request_id="+requestID)
+	}
+	parts = append(parts, fields...)
+	log.Print(strings.Join(parts, " "))
+}
+
+func logAuthEventByRequestID(requestID, event string, fields ...string) {
+	parts := []string{"event=" + event}
+	if requestID != "" {
+		parts = append(parts, "request_id="+requestID)
+	}
+	parts = append(parts, fields...)
+	log.Print(strings.Join(parts, " "))
+}
+
+func logAuthEvent(r *http.Request, event string, fields ...string) {
+	parts := []string{"event=" + event}
+	if requestID := r.Header.Get("X-Request-ID"); requestID != "" {
+		parts = append(parts, "request_id="+requestID)
+	}
+	parts = append(parts, fields...)
+	log.Print(strings.Join(parts, " "))
 }

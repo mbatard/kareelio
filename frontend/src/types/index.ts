@@ -37,6 +37,7 @@ export interface RegisterRequest {
   email: string;
   password: string;
   display_name?: string;
+  language?: 'fr' | 'en';
 }
 
 export interface UpdateUserRequest {
@@ -92,7 +93,6 @@ export interface AboutInfo {
   version: string;
   name: string;
   description: string;
-  go_version: string;
 }
 
 export interface AdminDashboard {
@@ -103,6 +103,10 @@ export interface AdminDashboard {
   by_source: Record<string, number>;
   by_remote: Record<string, number>;
   by_priority: Record<string, number>;
+}
+
+export interface AdminNotificationSummary {
+  new_user_registrations: number;
 }
 
 export interface AuditEvent {

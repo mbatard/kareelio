@@ -5,6 +5,74 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Public authentication pages now expose the same language and theme toggles as the authenticated navbar.
+- Safe backend startup diagnostics for job application encryption configuration.
+- Kubernetes secret example entries for job application encryption keys.
+- Admin users list action to resend verification email for unverified non-admin users.
+
+### Changed
+
+- Verification emails are now sent in the user's selected language instead of using a bilingual body and sender-derived subject language.
+- Public registration and public verification resend now queue email delivery asynchronously so SMTP latency does not delay user-facing success responses.
+- About page now displays the application version injected at backend image build time and no longer displays the Go version.
+- Backend request logs now skip `/api/healthz` and `/api/readyz` probe traffic.
+- Local Docker Compose examples now pass job application encryption flags to the backend.
+
+## [1.2.0] - 2026-08-01
+
+### Added
+
+- Email verification operations for public registration and resend flows.
+- Admin-only endpoint and UI action to force-resend verification emails for unverified non-admin users.
+- Safe backend action logs for registration, public resend, admin resend, and mail delivery paths.
+- Safe frontend API lifecycle logs gated by development mode or `VITE_DEBUG_LOGS=true`.
+- SMTP startup/config summary and phase-specific SMTP send diagnostics.
+- SMTP timeout configuration with `SMTP_TIMEOUT_SECONDS`.
+
+### Changed
+
+- SMTP examples and production configuration now default to unauthenticated relay port `25`.
+- Public registration and resend responses remain generic where needed to avoid account enumeration while internal failures are logged server-side.
+
+## [1.1.0] - 2026-08-01
+
+### Added
+
+- Encrypted storage support for sensitive job application fields.
+- Job application encryption backfill with dry-run support.
+- Encrypted-read enforcement flag for production rollout.
+- Kubernetes configuration for requiring encrypted job application reads.
+
+### Changed
+
+- Job application reads can decrypt encrypted fields and optionally reject legacy plaintext rows until backfill is complete.
+
+## [1.0.2] - 2026-07-28
+
+### Fixed
+
+- Aligned job application status badge colors.
+
+## [1.0.1] - 2026-07-28
+
+### Fixed
+
+- Improved applications mobile layout.
+
+## [1.0.0] - 2026-07-28
+
+### Added
+
+- Semantic Release workflow for automated tags, GitHub releases, and release notes.
+
+### Changed
+
+- Backend Go toolchain upgraded to Go 1.26.
+
 ## [0.1.0] - 2026-07-14
 
 ### Added

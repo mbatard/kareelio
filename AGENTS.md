@@ -27,14 +27,22 @@
 - `make deploy VERSION=x.y.z` — déploie sur K8s
 - **Avant de créer une PR** : `make lint && make test` doit passer
 
+## Documentation
+
+- Pour chaque plan/PR, vérifier si `README.md`, `CHANGELOG.md` et `AGENTS.md` doivent être mis à jour
+- `README.md` doit refléter les fonctionnalités, routes API, variables d'environnement et procédures de déploiement visibles pour les opérateurs/développeurs
+- `CHANGELOG.md` doit être tenu à jour pour les changements utilisateurs/opérateurs entre releases, même si semantic-release génère aussi les GitHub Releases
+- `AGENTS.md` doit être mis à jour quand le workflow, les commandes, les règles de sécurité ou les conventions changent
+- Les changements de documentation doivent rester dans la même PR que le code associé, sauf PR docs dédiée explicite
+
 ## OpenCode Workflow
 
 - Configuration projet uniquement : `opencode.json` + `.opencode/`
 - Agents principaux :
   - `platform-plan` — GPT-5.5, lecture seule, planification Platform/SRE
-  - `platform-build` — GPT-5 mini, agent par défaut, implémentation incrémentale
+  - `platform-build` — GPT-5.4 mini, agent par défaut, implémentation incrémentale
   - `platform-review` — GPT-5.5, lecture seule, review sécurité/fiabilité
-  - `platform-commit` — GPT-5 mini, workflow git/PR sécurisé
+  - `platform-commit` — GPT-5.4 mini, workflow git/PR sécurisé
 - Slash commands :
   - `/plan <objectif>` — crée/met à jour `PLAN.md`
   - `/next` — implémente uniquement la prochaine tâche non cochée de `PLAN.md`
@@ -93,7 +101,7 @@ make deploy-logs
 ## Structure du Projet
 
 ```
-backend/          Go 1.22, chi router, pgx, bcrypt
+backend/          Go 1.26, chi router, pgx, bcrypt
   cmd/server/     Point d'entrée
   internal/       Handlers, middleware, models, repository, validation, config, mailer
   migrations/     SQL migrations (001-xxx.up.sql / .down.sql)

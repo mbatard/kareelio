@@ -9,7 +9,7 @@ Job application tracker — manage your job search in one place.
 
 ## Stack
 
-- **Backend**: Go 1.22, chi router, PostgreSQL 16, bcrypt, HttpOnly session cookies
+- **Backend**: Go 1.26, chi router, PostgreSQL 16, bcrypt, HttpOnly session cookies
 - **Frontend**: React 18, TypeScript, Vite, TailwindCSS, i18next
 - **Database**: PostgreSQL 16
 - **Local deployment**: Docker Compose
@@ -24,6 +24,9 @@ Job application tracker — manage your job search in one place.
 - Admin audit log with actor, action, IP, timestamp, and metadata
 - Admin account is protected (cannot be deleted, deactivated, or role-changed)
 - Admin can reset user passwords from the edit page
+- Email verification for public registrations with resend support
+- Admin can force-resend verification emails for unverified non-admin users
+- Encrypted job application sensitive fields with backfill and enforcement controls
 - Light/dark/system theme toggle
 - FR/EN/system language toggle
 - Profile management (name, email, password, language, theme)
@@ -87,7 +90,7 @@ Default admin credentials:
 
 ### Prerequisites
 
-- Go 1.22+
+- Go 1.26+
 - Node.js 20+
 - PostgreSQL 16+ (or use Docker)
 
@@ -121,15 +124,39 @@ make test-frontend   # Frontend only
 make lint
 ```
 
+## Configuration
+
+Key environment variables:
+
+| Variable | Description |
+|----------|-------------|
+| `APP_PUBLIC_URL` | Public frontend URL used in verification links |
+| `REGISTRATION_ENABLED` | Enables or disables public registration |
+| `VERIFICATION_TOKEN_TTL_HOURS` | Verification token lifetime, default `24` |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM` | SMTP relay settings; local and K8s examples default to unauthenticated port `25` |
+| `SMTP_USERNAME`, `SMTP_PASSWORD` | Optional SMTP credentials; leave empty for an unauthenticated trusted relay |
+| `SMTP_TIMEOUT_SECONDS` | SMTP connect/send timeout, default `10` |
+| `VITE_DEBUG_LOGS` | Enables safe frontend API lifecycle logs when set to `true`; dev mode logs by default |
+| `DATA_ENCRYPTION_KEY_ID` | Identifier stored in encrypted field envelopes |
+| `DATA_ENCRYPTION_KEY` | Base64 encryption key for job application sensitive fields |
+| `JOB_APPLICATIONS_BACKFILL` | Runs job application encryption backfill at backend startup |
+| `JOB_APPLICATIONS_BACKFILL_DRY_RUN` | Counts backfill candidates without writing when `true` |
+| `JOB_APPLICATIONS_REQUIRE_ENCRYPTED_READS` | Fails startup/reads if encrypted data is required but unavailable |
+
+For production mail, `SMTP_HOST` is provided from the Kubernetes secret, while `SMTP_PORT=25` and `SMTP_FROM` are configured in the ConfigMap. For production encryption, `DATA_ENCRYPTION_KEY_ID` and `DATA_ENCRYPTION_KEY` must be present in the Kubernetes secret; generate the key with a 32-byte base64 value such as `openssl rand -base64 32`. Do not commit real SMTP credentials or encryption keys.
+
 ## API Endpoints
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | GET | /api/healthz | No | Health check |
 | GET | /api/readyz | No | Readiness check |
+| POST | /api/auth/register | No | Register and send verification email |
 | POST | /api/auth/login | No | Login |
 | POST | /api/auth/logout | Yes | Logout |
 | GET | /api/auth/me | Yes | Current user |
+| POST | /api/auth/verify-email | No | Verify email token |
+| POST | /api/auth/resend-verification | No | Public resend for unverified account |
 | GET | /api/profile | Yes | Get profile |
 | PUT | /api/profile | Yes | Update profile |
 | PUT | /api/profile/password | Yes | Change password |
@@ -147,6 +174,7 @@ make lint
 | PUT | /api/users/:id | Admin | Update user |
 | DELETE | /api/users/:id | Admin | Delete user |
 | PUT | /api/users/:id/password | Admin | Reset user password |
+| POST | /api/users/:id/resend-verification | Admin | Force-resend verification email for unverified non-admin user |
 | GET | /api/admin/dashboard | Admin | Dashboard stats |
 | GET | /api/admin/audit | Admin | Audit log |
 
@@ -203,7 +231,9 @@ kareelio/
 │   ├── internal/
 │   │   ├── config/             # Environment configuration
 │   │   ├── database/           # PostgreSQL connection + migrations
+│   │   ├── encryption/         # Data encryption helpers
 │   │   ├── handler/            # HTTP handlers
+│   │   ├── mailer/             # Verification email delivery
 │   │   ├── middleware/          # Auth, CORS, security, logging, audit
 │   │   ├── model/              # Data types
 │   │   ├── repository/         # Database queries
@@ -239,20 +269,22 @@ kareelio/
 | Risk | Mitigation |
 |------|------------|
 | Broken Access Control | Data isolation by `owner_user_id`, RBAC, admin protections |
-| Cryptographic Failures | bcrypt passwords, HttpOnly/SameSite session cookies |
+| Cryptographic Failures | bcrypt passwords, encrypted sensitive application fields, HttpOnly/SameSite session cookies |
 | Injection | Parameterized queries (pgx), input validation |
 | Insecure Design | CSRF protection, rate limiting, security headers |
 | Security Misconfiguration | K8s security contexts, CiliumNetworkPolicy, Traefik hardening |
 | Vulnerable Components | Pinned base images, no `latest` tags in K8s |
 | Auth Failures | Rate limiting on login (10 req/min per IP), session timeout |
 | Data Integrity Failures | CSV formula injection protection, strict import validation |
-| Logging Failures | Comprehensive audit log with actor, IP, action, metadata |
+| Logging Failures | Comprehensive audit log and safe request/action logs without secrets or verification tokens |
 | SSRF | Origin/Referer validation on state-changing requests |
 
 ### Specific Measures
 
 - **Passwords**: bcrypt with default cost
-- **Sessions**: HttpOnly, SameSite=Lax, configurable Secure flag, configurable duration
+- **Job application encryption**: sensitive fields are encrypted with an application-managed key and can be backfilled before enforcing encrypted reads
+- **Email verification**: public registration requires token verification; resend flows avoid public account enumeration
+- **Sessions**: HttpOnly, Secure, configurable SameSite policy, configurable duration
 - **Rate limiting**: 10 requests/min per IP on `/api/auth/login`
 - **CSRF**: Origin/Referer check on POST/PUT/PATCH/DELETE
 - **CSV import**: Formula injection protection (prefix `=`, `+`, `-`, `@`), strict enum validation, 1000-row limit

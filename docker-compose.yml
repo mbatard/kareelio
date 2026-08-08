@@ -21,6 +21,12 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     restart: unless-stopped
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    user: "1000:1000"
     ports:
       - "8080:8080"
     environment:
@@ -41,10 +47,16 @@ services:
       REGISTRATION_ENABLED: "true"
       VERIFICATION_TOKEN_TTL_HOURS: "24"
       SMTP_HOST: ${SMTP_HOST:-}
-      SMTP_PORT: ${SMTP_PORT:-587}
+      # Default to unauthenticated port-25 relay; set SMTP_USERNAME/PASSWORD only if your relay requires auth.
+      SMTP_PORT: ${SMTP_PORT:-25}
       SMTP_USERNAME: ${SMTP_USERNAME:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_FROM: ${SMTP_FROM:-}
+      DATA_ENCRYPTION_KEY_ID: ${DATA_ENCRYPTION_KEY_ID:-}
+      DATA_ENCRYPTION_KEY: ${DATA_ENCRYPTION_KEY:-}
+      JOB_APPLICATIONS_BACKFILL: ${JOB_APPLICATIONS_BACKFILL:-false}
+      JOB_APPLICATIONS_BACKFILL_DRY_RUN: ${JOB_APPLICATIONS_BACKFILL_DRY_RUN:-true}
+      JOB_APPLICATIONS_REQUIRE_ENCRYPTED_READS: ${JOB_APPLICATIONS_REQUIRE_ENCRYPTED_READS:-false}
     depends_on:
       postgres:
         condition: service_healthy
@@ -56,8 +68,14 @@ services:
       args:
         VITE_API_URL: /
     restart: unless-stopped
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    user: "101:101"
     ports:
-      - "5173:80"
+      - "5173:8080"
     depends_on:
       backend:
         condition: service_started

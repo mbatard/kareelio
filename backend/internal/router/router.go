@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/user/kareelio/backend/internal/config"
+	"github.com/user/kareelio/backend/internal/encryption"
 	"github.com/user/kareelio/backend/internal/handler"
 	"github.com/user/kareelio/backend/internal/mailer"
 	"github.com/user/kareelio/backend/internal/middleware"
@@ -14,12 +15,13 @@ import (
 	"github.com/user/kareelio/backend/internal/repository"
 )
 
-func New(db *pgxpool.Pool, cfg *config.Config) *chi.Mux {
+func New(db *pgxpool.Pool, cfg *config.Config, enc *encryption.Manager) *chi.Mux {
 	userRepo := repository.NewUserRepository(db)
 	sessionRepo := repository.NewSessionRepository(db, cfg.SessionDurationHours)
-	jaRepo := repository.NewJobApplicationRepository(db)
+	jaRepo := repository.NewJobApplicationRepository(db, enc, cfg.JobApplicationRequireEncryptedReads)
 	adminDashRepo := repository.NewAdminDashboardRepository(db)
 	auditRepo := repository.NewAuditRepository(db)
+	adminNotifRepo := repository.NewAdminNotificationRepository(db)
 	evRepo := repository.NewEmailVerificationRepository(db)
 
 	m := mailer.New(cfg)
@@ -30,6 +32,7 @@ func New(db *pgxpool.Pool, cfg *config.Config) *chi.Mux {
 	jaHandler := handler.NewJobApplicationHandler(jaRepo, auditRepo)
 	csvHandler := handler.NewCSVHandler(jaRepo, auditRepo)
 	adminDashHandler := handler.NewAdminDashboardHandler(adminDashRepo)
+	adminNotifHandler := handler.NewAdminNotificationHandler(adminNotifRepo)
 	auditHandler := handler.NewAuditHandler(auditRepo)
 	aboutHandler := handler.NewAboutHandler()
 	healthHandler := handler.NewHealthHandler(db)
@@ -83,15 +86,18 @@ func New(db *pgxpool.Pool, cfg *config.Config) *chi.Mux {
 			r.Use(middleware.RequireRole(model.RoleAdmin))
 
 			r.Get("/api/admin/dashboard", adminDashHandler.Get)
+			r.Get("/api/admin/notifications", adminNotifHandler.GetUserRegistrations)
+			r.Post("/api/admin/notifications/user-registrations/ack", adminNotifHandler.AcknowledgeUserRegistrations)
 			r.Get("/api/admin/audit", auditHandler.List)
 
 			r.Route("/api/users", func(r chi.Router) {
 				r.Get("/", userHandler.List)
 				r.Post("/", userHandler.Create)
+				r.Post("/{id}/resend-verification", authHandler.AdminResendVerification)
 				r.Get("/{id}", userHandler.Get)
-			r.Put("/{id}", userHandler.Update)
-			r.Delete("/{id}", userHandler.Delete)
-			r.Put("/{id}/password", userHandler.ChangePassword)
+				r.Put("/{id}", userHandler.Update)
+				r.Delete("/{id}", userHandler.Delete)
+				r.Put("/{id}/password", userHandler.ChangePassword)
 			})
 		})
 	})
