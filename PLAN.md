@@ -2,137 +2,143 @@
 
 ## Objective
 
-Résoudre les problèmes identifiés lors de la review du durcissement des conteneurs Kareelio avant PR/rollout : aligner la NetworkPolicy frontend avec le port runtime 8080, rétablir une validation `npm audit --audit-level=high` verte, réduire les permissions GitHub Actions sur les PR, et remettre le plan/branch de hardening en cohérence avec `origin/main`.
+Améliorer la sécurité de la PR #54 suite aux retours GitHub Advanced Security et CI : supprimer les alertes CodeQL “Uncontrolled data used in path expression” dans `frontend/server.go`, corriger la vulnérabilité high `nanoid <3.3.17` remontée par `npm audit --audit-level=high`, puis revalider et mettre à jour la PR sans élargir le périmètre du hardening.
 
 ## Constraints
 
 - Protected `main`: feature branch + PR only; no direct pushes to `main`.
+- Branche de travail: `chore/harden-runtime-containers`, PR #54 ouverte contre `main`; ne pas pousser sur `main`.
 - Pendant cette étape de planification, ne modifier que `PLAN.md`.
-- Le worktree principal `/Users/mikael/kareelio` est sale sur `fix/applications-status-colors`; ne pas y implémenter les corrections fonctionnelles.
-- Implémenter depuis un worktree/branch propre basé sur `origin/main`, ou rafraîchir `/tmp/opencode/kareelio-runtime-harden-baseline` avant toute correction applicative.
-- Garder les corrections petites, réversibles, et validées individuellement.
-- Ne pas introduire ni exposer de secrets; GitHub Actions PR ne doit pas accéder aux secrets.
-- GitHub Actions: ne pas utiliser `pull_request_target`; permissions minimales; publication d’images uniquement sur événements de confiance (`push` main/tags).
-- Kubernetes: préserver `runAsNonRoot`, `allowPrivilegeEscalation: false`, `capabilities.drop: [ALL]`, `seccompProfile: RuntimeDefault`, resource requests/limits, probes et CiliumNetworkPolicy; aucun `kubectl apply` destructif ni rollout production sans validation explicite.
-- Frontend dependencies: éviter une migration majeure React Router dans la même étape sauf si nécessaire pour passer les checks; documenter toute vulnérabilité moderate résiduelle et sa décision.
+- Garder les corrections minimales et liées aux deux retours sécurité confirmés.
+- Ne pas réintroduire Nginx ni changer l’architecture du hardening sans décision explicite; l’objectif reste une image frontend runtime sans shell.
+- Ne pas introduire de secrets, tokens, logs sensibles, ou accès à `secrets.*` dans les workflows PR.
+- Éviter toute migration majeure React Router dans ce correctif; les advisories moderate React Router restent un follow-up séparé sauf si elles deviennent high/critical ou disposent d’un patch non breaking.
+- Ne pas modifier les manifestes Kubernetes/Compose/Docker sauf si requis pour faire passer les tests; si infra change, inclure validation et rollback.
+- Pour GitHub Actions, ne pas utiliser `pull_request_target`; conserver les permissions minimales.
 
 ## Current State
 
-- Repository analysé: `/Users/mikael/kareelio`.
-- Worktree principal actuel: branche `fix/applications-status-colors`, en avance de 1 commit, avec de nombreuses modifications non liées; il sert à porter ce `PLAN.md`, pas à implémenter les corrections de hardening.
-- Worktree de hardening existant: `/tmp/opencode/kareelio-runtime-harden-baseline`, branche `chore/harden-runtime-containers`, tracking `origin/main`, maintenant rafraîchi sur `origin/main` avec le diff de hardening réappliqué.
-- Le worktree de hardening contient les changements de durcissement déjà revus: backend `scratch`, frontend `scratch` + `frontend/server.go`, compose hardening, frontend Deployment/Service sur port 8080, workflow Docker avec check no-shell.
-- Problèmes confirmés par review/analyse:
-  - `deploy/k8s/frontend-deployment.yaml` expose le frontend sur `containerPort: 8080` et `deploy/k8s/frontend-service.yaml` garde `port: 80` avec `targetPort: 8080`.
-  - `deploy/k8s/networkpolicy.yaml` autorise encore Traefik vers les pods frontend uniquement sur le port `80`; avec Cilium, cela risque de bloquer le trafic Traefik -> frontend après rollout.
-  - `npm audit --audit-level=high` échoue dans `frontend/` à cause de `brace-expansion` high severity; il signale aussi des advisories moderate sur `react-router` / `react-router-dom`.
-  - `.github/workflows/ci.yml` exécute `npm audit --audit-level=high`, donc la PR échouera tant que la vulnérabilité high reste présente.
-  - `.github/workflows/docker.yml` donne actuellement `packages: write` au niveau workflow, y compris pour l’événement `pull_request`; les étapes de push/login sont conditionnées, mais les permissions ne sont pas minimales sur PR.
-  - Le `PLAN.md` dans `/tmp/opencode/kareelio-runtime-harden-baseline` décrit encore un objectif SMTP/email-verification et ne correspond pas au travail de hardening; le plan source de vérité est ce fichier.
-- Validations déjà connues du hardening précédent:
-  - Images backend/frontend sans `/bin/sh` confirmées localement.
-  - `make lint`, `make build`, `go test ./...`, `go build ./...`, `docker compose config`, et smoke tests Compose ont passé.
-  - `make test` reste bloqué dans cet environnement par l’absence de compilateur C requis pour `go test -race` (`aarch64-linux-gnu-gcc`).
-  - `kubectl` n’est pas installé ici; les validations server-side Kubernetes devront être exécutées dans un environnement cluster-capable.
+- Worktree analysé: `/tmp/opencode/kareelio-runtime-harden-baseline`.
+- Branche: `chore/harden-runtime-containers`, tracking `origin/chore/harden-runtime-containers`, propre au moment de l’analyse locale après le commit `fb8badc fix(hardening): align runtime hardening and ci`.
+- PR: #54 (`fix(hardening): align runtime hardening and ci`) ouverte contre `main`.
+- Checks GitHub observés:
+  - `Frontend`: failed.
+  - `CodeQL`: failed via review/annotations GitHub Advanced Security.
+  - `Analyze (go)`, `Analyze (javascript-typescript)`, `Backend`, `Build Backend`, `Build Frontend`: passed.
+- Alertes CodeQL confirmées dans `frontend/server.go`:
+  - `frontend/server.go:94`: `os.Stat(fsPath)` dépend d’un chemin dérivé de `r.URL.Path`.
+  - `frontend/server.go:115`: `http.ServeFile(..., filePath)` reçoit ce chemin dérivé.
+  - Type: `Uncontrolled data used in path expression`.
+- Échec CI frontend confirmé dans les logs PR:
+  - `npm audit --audit-level=high` signale `nanoid <3.3.17` high severity (`GHSA-2v37-7h3g-55p8`).
+  - Le lockfile courant contient `nanoid@3.3.16` sous `frontend/package-lock.json`.
+  - `nanoid` est transitive via `postcss@8.5.23` (`postcss` déclare `nanoid: ^3.3.16`).
+- État local après relecture:
+  - `npm audit --json` confirme `nanoid` high, plus les advisories moderate React Router déjà documentées.
+  - `npm ls nanoid` montre `postcss@8.5.23 -> nanoid@3.3.16`.
+- Les changements de hardening précédents restent attendus et validés: backend/frontend runtime `scratch`, frontend Go static/proxy server, Compose hardening, K8s frontend port 8080 + CiliumNetworkPolicy, workflow Docker permissions réduites.
 
 ## Tasks
 
-- [x] Rafraîchir le worktree/branch de hardening et synchroniser le plan.
-  - Dans `/tmp/opencode/kareelio-runtime-harden-baseline`, vérifier `git status -sb`, sauvegarder/inspecter le diff courant, puis rafraîchir proprement contre le dernier `origin/main` sans perdre les changements de hardening.
-  - Si le rebase est risqué à cause du retard de 6 commits, créer un nouveau worktree/branch propre depuis `origin/main` et y réappliquer uniquement les changements de hardening nécessaires.
-  - Copier ou mettre à jour `PLAN.md` dans le branch de hardening pour qu’il corresponde à ce plan de remediation.
-  - Validation: `git status -sb`, `git diff --check`, et revue que le branch contient le bon `PLAN.md` et aucune modification non voulue.
-  - Findings: le worktree de hardening a été fast-forwardé sur le dernier `origin/main`, le diff de hardening a été stashed puis réappliqué, et `PLAN.md` a été resynchronisé avec ce plan de remediation. Vérifié avec `git status -sb` et `git diff --check`; aucun changement applicatif supplémentaire n’a été introduit pendant le rafraîchissement.
+- [x] Corriger les alertes CodeQL de path traversal dans `frontend/server.go`.
+  - Modifier uniquement `frontend/server.go` sauf nécessité de tests/formatage.
+  - Supprimer le flux direct `r.URL.Path -> filepath.Join(distDir, ...) -> os.Stat/http.ServeFile`.
+  - Implémenter une résolution sûre des assets statiques, par exemple:
+    - traiter `/` et les routes SPA sans extension via un chemin constant prévalidé `index.html`;
+    - rejeter explicitement les chemins contenant un segment caché (`/.env`, `/.git`, etc.) afin de conserver l’intention de l’ancien bloc Nginx `location ~ /\.`;
+    - servir uniquement les fichiers asset connus par extension via un mécanisme qui contraint la lecture à `distDir` (`http.FileServer(http.Dir(distDir))`, `fs.ValidPath`/`http.FS(os.DirFS(distDir))`, ou équivalent sûr);
+    - éviter `http.ServeFile` avec un chemin assemblé depuis une entrée utilisateur.
+  - Préserver le comportement existant: SPA fallback, `/healthz`, `/readyz`, `/api/` reverse proxy, cache immutable pour assets, `no-store` pour `index.html`, headers sécurité.
+  - Validation ciblée:
+    - `docker build -t kareelio-frontend-hardened ./frontend`.
+    - Démarrer le frontend avec backend/compose ou image locale et vérifier `/`, `/healthz`, `/readyz`, `/api/healthz`, un asset `/assets/...`, et un chemin caché type `/.env` qui doit répondre 404.
+    - `git diff --check`.
+  - Validation GitHub attendue après push: l’annotation CodeQL PR #54 doit disparaître.
+  - Findings: `frontend/server.go` ne transmet plus un chemin dérivé de `r.URL.Path` à `os.Stat`/`http.ServeFile`; les assets sont servis via `http.FileServer(http.Dir(distDir))`, les chemins cachés sont rejetés explicitement, et `index.html` reste servi depuis un chemin constant. Vérifié avec `docker build -t kareelio-frontend-hardened ./frontend`, `docker compose up -d --build postgres backend frontend`, smoke tests sur `/`, `/healthz`, `/readyz`, `/api/healthz`, `/assets/index-DCDKC_dC.js`, `/.env`, `/.git/config`, puis `docker compose down`; `git diff --check` est propre.
 
-- [x] Corriger la CiliumNetworkPolicy frontend pour le port runtime 8080.
-  - Modifier seulement `deploy/k8s/networkpolicy.yaml` pour autoriser Traefik vers les pods frontend sur le port `8080` au lieu de `80`.
-  - Ne pas changer `frontend-service.yaml` `port: 80`; le Service peut rester exposé sur 80 tant que `targetPort: 8080` pointe vers le pod.
-  - Vérifier que `frontend-deployment.yaml`, `frontend-service.yaml`, `ingress.yaml`, et `networkpolicy.yaml` restent cohérents: Traefik route vers le Service port 80, Service target vers pod 8080, NetworkPolicy autorise pod 8080.
-  - Validation: `git diff --check`; `kubectl apply --dry-run=server -f deploy/k8s/` et `kubectl diff -f deploy/k8s/` dans un environnement où `kubectl` est disponible. Si `kubectl` reste indisponible localement, documenter le blocage dans `PLAN.md` et faire au minimum une revue statique des ports.
-  - Findings: Traefik reste routé vers le Service frontend sur le port 80, le Service cible toujours le pod sur 8080, et la CiliumNetworkPolicy autorise désormais Traefik vers les pods frontend sur le port 8080. Vérifié par revue statique de `deploy/k8s/ingress.yaml`, `deploy/k8s/frontend-service.yaml`, `deploy/k8s/frontend-deployment.yaml`, `deploy/k8s/networkpolicy.yaml`, et `git diff --check`; `kubectl` n’est pas disponible ici pour la validation server-side.
+- [x] Corriger la vulnérabilité high `nanoid <3.3.17` sans migration majeure.
+  - Dans `frontend/`, exécuter une correction non breaking (`npm audit fix` ou mise à jour lockfile équivalente) pour remonter `nanoid` à `3.3.17+`.
+  - Ne pas utiliser `npm audit fix --force` sans décision explicite; ne pas migrer React Router v7 dans cette tâche.
+  - Inspecter le diff de `frontend/package-lock.json` pour vérifier que le changement reste limité à `nanoid`/lockfile et ne modifie pas les dépendances runtime majeures.
+  - Validation:
+    - `cd frontend && npm audit --audit-level=high`.
+    - `cd frontend && npm run lint`.
+    - `cd frontend && npm run build`.
+    - `cd frontend && npm run test`.
+  - Documenter les advisories moderate React Router restantes comme follow-up si elles persistent.
+  - Findings: `npm audit fix` a remonté `nanoid` en `3.3.18` dans `frontend/package-lock.json` sans migration React Router. Vérifié avec `cd frontend && npm audit --audit-level=high` (qui passe toujours), `npm run lint`, `npm run build`, `npm run test`, et `git diff --check`; le diff lockfile reste limité à `nanoid`.
 
-- [x] Résoudre le blocage `npm audit --audit-level=high` frontend.
-  - Tenter d’abord une correction non breaking via `npm audit fix` dans `frontend/` afin de mettre à jour la dépendance transitive `brace-expansion`.
-  - Ne pas utiliser `npm audit fix --force` sans décision explicite, car cela peut migrer `react-router-dom` vers v7 et introduire un changement majeur.
-  - Si `react-router` moderate reste signalé mais que `npm audit --audit-level=high` passe, documenter la vulnérabilité moderate résiduelle et créer une décision/follow-up séparé pour une migration React Router v7.
-  - Validation: `cd frontend && npm audit --audit-level=high`, `npm run lint`, `npm run build`, et `npm run test` si disponible/stable.
-  - Findings: `npm audit fix` a remonté `brace-expansion` en `5.0.9`, ce qui fait passer `npm audit --audit-level=high`; il reste deux advisories moderate sur `react-router` / `react-router-dom` liés à une migration v7 explicite. Vérifié avec `npm audit --audit-level=high`, `npm run lint`, `npm run build`, `npm run test`, et `git diff --check`; seul `frontend/package-lock.json` a changé.
-
-- [x] Réduire les permissions GitHub Actions du workflow Docker.
-  - Remplacer les permissions workflow-level trop larges par des permissions job-level ou une structure équivalente: PR builds avec `contents: read` seulement; publication GHCR avec `packages: write` uniquement sur `push` main/tags.
-  - Conserver les guards existants: pas de `pull_request_target`, pas de secrets sur PR externe, `docker/login-action` et `push: true` uniquement hors `pull_request`.
-  - Préserver le check no-shell des images PR.
-  - Validation: `git diff --check`; `actionlint` si disponible; revue manuelle des triggers/permissions; GitHub Actions PR run après push.
-  - Findings: `.github/workflows/docker.yml` now runs PR image builds under `contents: read` only, while `packages: write` is scoped to dedicated publish jobs that run only on trusted push/tag events. The PR no-shell checks are preserved. Verified by manual workflow review and `git diff --check`; `actionlint` is not installed here.
-
-- [x] Revalider l’ensemble après corrections.
+- [x] Revalider la PR #54 après les corrections sécurité.
+  - `git diff --check`.
   - `make lint`.
   - `make build`.
-  - `make test` si l’environnement dispose du compilateur C requis pour `-race`; sinon documenter le blocage et exécuter `cd backend && go test ./...` plus les tests frontend.
+  - `make test` si l’environnement dispose du compilateur C requis pour `go test -race`; sinon documenter le blocage et exécuter `cd backend && go test ./...` plus `cd frontend && npm run test`.
   - `docker compose config`.
-  - `docker compose up -d --build postgres backend frontend` puis smoke tests frontend `/`, `/healthz`, `/readyz`, `/api/healthz`, backend `/api/healthz`, backend `/api/readyz`.
+  - `docker compose up -d --build postgres backend frontend`, puis smoke tests:
+    - frontend `/`, `/healthz`, `/readyz`;
+    - frontend proxy `/api/healthz`;
+    - backend `/api/healthz`, `/api/readyz`;
+    - asset statique sous `/assets/...`;
+    - chemin caché `/.env` ou `/.git/config` attendu en 404.
   - Vérifier que les images backend/frontend restent sans shell: `docker run --rm --entrypoint /bin/sh <image>` doit échouer.
-  - Vérifier `npm audit --audit-level=high`.
-  - Findings: `make lint`, `make build`, `cd backend && go test ./...`, `cd frontend && npm run test`, `docker compose config`, and a full `docker compose up -d --build postgres backend frontend` smoke test all passed. HTTP smoke checks covered frontend `/`, `/healthz`, `/readyz`, `/api/healthz` and backend `/api/healthz`, `/api/readyz`. Both runtime images still fail `docker run --rm --entrypoint /bin/sh <image>` as expected. `npm audit --audit-level=high` passes; the Docker build path also remained green after the workflow permission split. `make test` is still blocked in this environment because the `-race` backend target needs a C compiler (`aarch64-linux-gnu-gcc`) that is not installed here.
+  - Nettoyer les containers de validation avec `docker compose down`.
+  - Findings: `git diff --check`, `make lint`, `make build`, `cd backend && go test ./...`, `cd frontend && npm run test`, `docker compose config`, `docker compose up -d --build postgres backend frontend`, smoke tests frontend `/`, `/healthz`, `/readyz`, `/api/healthz`, `/assets/index-DCDKC_dC.js`, `/.env`, `/.git/config`, backend `/api/healthz`, `/api/readyz`, and both shell-absence checks all passed. `make test` remains blocked in this environment because `go test -race` needs `CGO_ENABLED=1` and a C compiler (`aarch64-linux-gnu-gcc`) that are not installed here. `npm audit --audit-level=high` still passes; the remaining frontend advisories are the documented moderate React Router follow-up.
 
-- [x] Préparer PR et rollout production après validation.
-  - Avant PR: inspecter `git status`, `git diff`, et vérifier que seuls les changements attendus sont inclus.
-  - PR: inclure le contexte de remediation, les validations, les validations bloquées (`kubectl`, `make test -race` si toujours bloqués), et le rollback.
-  - Après merge/release: déployer avec `make deploy VERSION=<new-version>`.
-  - Vérifier `make deploy-status`, `make deploy-logs`, frontend public, API proxy, probes frontend/backend, login/registration, et SMTP/TLS si concerné.
-  - Findings: `git status -sb` et `git diff --stat` confirment uniquement les changements attendus du hardening (`.github/workflows/docker.yml`, `backend/Dockerfile`, `deploy/k8s/frontend-deployment.yaml`, `deploy/k8s/frontend-service.yaml`, `deploy/k8s/networkpolicy.yaml`, `docker-compose.yml`, `frontend/Dockerfile`, `frontend/package-lock.json`, plus `frontend/.dockerignore` et `frontend/server.go`). `git diff --check` est propre. La PR est prête à être ouverte/mergée; le déploiement `make deploy VERSION=<new-version>` reste une opération post-merge.
+- [ ] Mettre à jour la PR #54 après validation.
+  - Committer les corrections en Conventional Commit, par exemple `fix(frontend): constrain static file serving` ou `fix(hardening): address frontend security checks` selon le diff final.
+  - Pousser uniquement la branche `chore/harden-runtime-containers`.
+  - Vérifier les checks PR #54:
+    - `Frontend` doit passer;
+    - `CodeQL` / GitHub Advanced Security ne doit plus afficher les deux alertes path expression;
+    - les jobs Docker PR doivent rester verts.
+  - Mettre à jour la description/commentaire PR avec les validations et les éventuels blocages locaux (`kubectl`, `make test -race`) si nécessaire.
 
 ## Validation
 
-- Git/workflow:
-  - `git status -sb`.
-  - `git diff --check`.
-  - `actionlint` si installé.
-  - Revue manuelle: aucun `pull_request_target`, pas de secrets dans PR workflow, permissions PR minimales, push GHCR uniquement sur événements de confiance.
-- Frontend dependencies:
+- CodeQL/path traversal:
+  - Revue du diff `frontend/server.go` pour confirmer qu’aucun chemin fichier n’est construit naïvement depuis `r.URL.Path`.
+  - Validation PR GitHub Advanced Security après push.
+- Frontend dependency/security:
   - `cd frontend && npm audit --audit-level=high`.
   - `cd frontend && npm run lint`.
   - `cd frontend && npm run build`.
   - `cd frontend && npm run test`.
-- Kubernetes/Cilium:
-  - Revue statique des ports frontend: IngressRoute service port 80, Service `targetPort: 8080`, Deployment `containerPort: 8080`, NetworkPolicy ingress pod port `8080`.
-  - `kubectl apply --dry-run=server -f deploy/k8s/`.
-  - `kubectl diff -f deploy/k8s/`.
-- Docker/Compose hardening regression:
+- Runtime/Compose regression:
+  - `docker build -t kareelio-frontend-hardened ./frontend`.
   - `docker compose config`.
-  - `docker compose up -d --build postgres backend frontend`.
-  - Smoke tests HTTP locaux.
-  - Runtime shell absence checks for backend/frontend.
-- Broader build/test:
+  - `docker compose up -d --build postgres backend frontend` + smoke tests HTTP.
+  - No-shell checks backend/frontend.
+- Broader validation:
   - `make lint`.
   - `make build`.
-  - `make test` where environment supports Go race detector C compiler; fallback: `cd backend && go test ./...` plus frontend test command, with blocker documented.
+  - `make test` where supported; fallback documented if `go test -race` lacks a C compiler.
+- GitHub Actions:
+  - PR #54 checks after push (`gh pr checks 54`).
+  - Revue: pas de `pull_request_target`, pas de secrets sur PR, publish GHCR seulement sur événements de confiance.
 
 ## Risks
 
-- NetworkPolicy port correction is small but production-critical; an incorrect port can cause frontend outage behind Traefik.
-- Rebase/branch refresh can conflict with the existing dirty root worktree or newer `origin/main`; use a separate worktree and inspect diffs before continuing.
-- `npm audit fix` can modify `package-lock.json` broadly; inspect dependency diff and avoid force updates unless explicitly accepted.
-- React Router v7 migration may require code changes and routing behavior validation; do not hide it inside an infra-only remediation if avoidable.
-- Tightening GitHub Actions permissions can break GHCR publishing if `packages: write` is not granted on trusted push/tag jobs.
-- `kubectl` validation remains environment-dependent; static YAML review is not a substitute for server-side validation before production rollout.
+- Une correction trop permissive du serveur statique peut laisser une traversal (`..`, chemins absolus, symlinks, fichiers cachés) ou casser le fallback SPA.
+- Remplacer trop largement la logique static/proxy peut introduire une régression de cache headers, CSP/security headers, health probes, ou proxy `/api/`.
+- `npm audit fix` peut modifier plus que `nanoid`; le diff lockfile doit être inspecté avant commit.
+- Les advisories React Router moderate restent un risque résiduel si elles sont acceptées temporairement; ne pas les masquer dans ce correctif.
+- CodeQL peut encore alerter si le code conserve un flux utilisateur vers `os.Stat`, `os.Open` ou `http.ServeFile` même après sanitation apparente.
+- Les validations `kubectl` restent non disponibles localement; ne pas déployer en production sans validation cluster-side.
 
 ## Rollback
 
-- NetworkPolicy rollback: revert the single `deploy/k8s/networkpolicy.yaml` port change to the previous value if the frontend rollout fails, then reapply previous manifests from the last known-good release.
-- Dependency rollback: revert `frontend/package.json` / `frontend/package-lock.json` changes and redeploy previous frontend image if runtime behavior regresses.
-- GitHub Actions rollback: revert `.github/workflows/docker.yml` permission changes if image publishing fails, while preserving no-shell checks if possible.
-- Branch/plan rollback: abandon the refreshed worktree/branch and recreate from `origin/main` if rebase/reapply becomes confusing.
-- Production rollback: redeploy previous known-good image tag with `make deploy VERSION=<previous-version>` and monitor with `make deploy-status` / `make deploy-logs`.
-- No database rollback expected; no schema changes planned.
+- Serveur frontend: revert du commit de correction `frontend/server.go` pour revenir au comportement précédent de la PR #54 si le frontend/proxy régresse.
+- Dépendances frontend: revert de `frontend/package-lock.json` si le lockfile cause une régression inattendue; cela réouvrira le blocage audit high et devra être remplacé par une autre correction.
+- Runtime hardening global: revert de la PR #54 complète et redeploy du dernier tag connu bon via `make deploy VERSION=<previous-version>` si un problème production est découvert après merge.
+- Docker/Compose validation: `docker compose down` pour nettoyer l’environnement local après tests.
+- Aucun rollback DB prévu; aucune migration ou changement de données n’est dans le périmètre.
 
 ## Notes / Decisions
 
-- Decision: fix the CiliumNetworkPolicy port mismatch before any rollout; this is the highest production-impact finding.
-- Decision: preserve frontend Service port 80 and Traefik IngressRoute service port 80; only the pod-facing target/network policy should move to 8080.
-- Decision: first try non-breaking dependency remediation for the high-severity audit blocker; React Router v7 is treated as separate unless required to pass `npm audit --audit-level=high`.
-- Decision: reduce Docker workflow permissions without changing publication event model.
-- Assumption: the hardening branch should ultimately contain the remediation plan in `PLAN.md` so reviewers can compare diff against plan in one PR.
-- Assumption: `kubectl` server-side validation will be run from a cluster-capable environment before production deployment.
-- Unresolved: whether the moderate React Router advisories must be fixed in this same PR or accepted temporarily with a follow-up migration plan.
-- First `/next` task for `platform-build`: refresh or recreate the clean hardening worktree/branch from latest `origin/main`, preserve/reapply the existing hardening diff, and copy this remediation `PLAN.md` into that branch; verify with `git status -sb` and `git diff --check`; do not change application, Docker, Kubernetes, dependency, or workflow files yet.
+- Decision: corriger d’abord CodeQL dans `frontend/server.go` car il s’agit d’un commentaire bloquant GitHub Advanced Security sur du code nouvellement ajouté.
+- Decision: corriger `nanoid` via lockfile/audit non breaking; ne pas utiliser `npm audit fix --force`.
+- Decision: maintenir React Router v7 comme follow-up séparé tant que les advisories restent moderate et que le fix est breaking.
+- Assumption: le serveur frontend doit continuer à tourner en image `scratch` sans shell; la solution ne doit pas revenir à Nginx dans ce correctif.
+- Assumption: les assets Vite restent servis sous `/assets/` avec extensions connues; les routes sans extension doivent fallback vers `index.html`.
+- Unresolved: CodeQL peut nécessiter une validation GitHub après push pour confirmer que les alertes path expression sont closes.
+- First `/next` task for `platform-build`: update only `frontend/server.go` to eliminate the CodeQL path-expression flow by constraining static file serving to `distDir` without passing user-derived filesystem paths to `os.Stat`/`http.ServeFile`; preserve SPA fallback, `/api/` proxy, health/readiness endpoints, security/cache headers, and hidden-file denial; verify with `docker build -t kareelio-frontend-hardened ./frontend`, local frontend/compose smoke tests including `/.env` returning 404, and `git diff --check`; do not change dependencies or workflows in this step.

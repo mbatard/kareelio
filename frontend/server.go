@@ -83,6 +83,7 @@ func newProxy(target *url.URL) http.Handler {
 
 func spaHandler(distDir string) http.HandlerFunc {
 	indexPath := filepath.Join(distDir, "index.html")
+	assetServer := http.FileServer(http.Dir(distDir))
 	return func(w http.ResponseWriter, r *http.Request) {
 		requestPath := path.Clean("/" + strings.TrimPrefix(r.URL.Path, "/"))
 		if requestPath == "/" {
@@ -90,20 +91,35 @@ func spaHandler(distDir string) http.HandlerFunc {
 			return
 		}
 
-		fsPath := filepath.Join(distDir, strings.TrimPrefix(requestPath, "/"))
-		info, err := os.Stat(fsPath)
-		if err == nil && !info.IsDir() {
-			serveFile(w, r, fsPath, isAssetFile(fsPath))
+		if containsHiddenSegment(requestPath) {
+			http.NotFound(w, r)
 			return
 		}
 
-		if strings.Contains(filepath.Base(requestPath), ".") {
-			http.NotFound(w, r)
+		if filepath.Ext(requestPath) != "" {
+			if isAssetFile(requestPath) {
+				w.Header().Set("Cache-Control", "public, immutable, max-age=31536000")
+			} else {
+				w.Header().Set("Cache-Control", "no-store")
+			}
+			assetServer.ServeHTTP(w, r)
 			return
 		}
 
 		serveFile(w, r, indexPath, false)
 	}
+}
+
+func containsHiddenSegment(requestPath string) bool {
+	for _, segment := range strings.Split(strings.TrimPrefix(requestPath, "/"), "/") {
+		if segment == "" {
+			continue
+		}
+		if strings.HasPrefix(segment, ".") {
+			return true
+		}
+	}
+	return false
 }
 
 func serveFile(w http.ResponseWriter, r *http.Request, filePath string, cacheable bool) {
