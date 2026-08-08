@@ -2,107 +2,143 @@
 
 ## Objective
 
-Address the review feedback for PR #47 (`feat(admin): add registration notifications`) with small, production-safe follow-up changes: bound the async admin notification lookup, add missing invalid-admin-email test coverage, clean stale planning notes, and explicitly triage the remaining React Router audit finding.
+Améliorer la sécurité de la PR #54 suite aux retours GitHub Advanced Security et CI : supprimer les alertes CodeQL “Uncontrolled data used in path expression” dans `frontend/server.go`, corriger la vulnérabilité high `nanoid <3.3.17` remontée par `npm audit --audit-level=high`, puis revalider et mettre à jour la PR sans élargir le périmètre du hardening.
 
 ## Constraints
 
 - Protected `main`: feature branch + PR only; no direct pushes to `main`.
-- Current feature branch is `fix/admin-notifications`; keep PR #47 as the integration path unless the user requests a separate branch/PR.
-- Planning step modifies only `PLAN.md`; source code changes start with `/next`.
-- Keep public registration non-blocking and generic; admin notification failures must not affect registration success.
-- Do not expose secrets, SMTP credentials, passwords, session IDs, CSRF values, verification tokens, cookies, or raw request bodies in logs/tests/emails.
-- Use existing SMTP env vars only; do not introduce new plaintext secrets.
-- Web notification endpoints must remain admin-only behind existing auth + CSRF middleware.
-- Prefer small, reversible, testable changes.
-- No Docker/Kubernetes/Terraform changes are expected. If implementation unexpectedly touches infra, include dry-run/diff validation and rollback before applying.
-- Do not perform a major React Router upgrade in this PR unless explicitly approved; the audit fix currently points to a breaking v7 upgrade.
+- Branche de travail: `chore/harden-runtime-containers`, PR #54 ouverte contre `main`; ne pas pousser sur `main`.
+- Pendant cette étape de planification, ne modifier que `PLAN.md`.
+- Garder les corrections minimales et liées aux deux retours sécurité confirmés.
+- Ne pas réintroduire Nginx ni changer l’architecture du hardening sans décision explicite; l’objectif reste une image frontend runtime sans shell.
+- Ne pas introduire de secrets, tokens, logs sensibles, ou accès à `secrets.*` dans les workflows PR.
+- Éviter toute migration majeure React Router dans ce correctif; les advisories moderate React Router restent un follow-up séparé sauf si elles deviennent high/critical ou disposent d’un patch non breaking.
+- Ne pas modifier les manifestes Kubernetes/Compose/Docker sauf si requis pour faire passer les tests; si infra change, inclure validation et rollback.
+- Pour GitHub Actions, ne pas utiliser `pull_request_target`; conserver les permissions minimales.
 
 ## Current State
 
-- Branch/worktree analyzed: `/tmp/opencode/kareelio-admin-notifications` on `fix/admin-notifications`, tracking `origin/fix/admin-notifications`.
-- Current committed feature head is `c390b80 feat(admin): add registration notifications`; PR #47 is open against `main`.
-- `origin/main` remains at `46cb28c` / tag `v1.3.0`.
-- The branch was clean before this planning update; this plan update intentionally dirties only `PLAN.md`.
-- Review feedback identified four items:
-  - Medium: `backend/internal/handler/admin_notification_email.go` uses `context.Background()` for async admin lookup without a timeout, so stalled DB operations could accumulate goroutines.
-  - Low: invalid non-local admin email skip is implemented but not directly tested; only `admin@kareelio.local` skip is covered.
-  - Low: old `PLAN.md` current-state text contradicted completed frontend badge work.
-  - Medium/residual risk: `frontend/package.json` / `package-lock.json` still use `react-router-dom`/`react-router` 6.30.4; `npm audit --audit-level=high` passes, but `npm audit` reports moderate React Router advisories whose available fix is a breaking v7 upgrade.
-- Existing backend notification code is in `backend/internal/handler/admin_notification_email.go`, `backend/internal/handler/admin_notifications.go`, `backend/internal/repository/admin_notification.go`, and `backend/internal/repository/user.go`.
-- Existing frontend badge code is in `frontend/src/components/Navbar.tsx`, with focused test coverage in `frontend/src/components/Navbar.test.tsx`.
-- No Kubernetes/Docker manifests were changed for the feature; the DB migration remains additive (`admin_notification_state`).
+- Worktree analysé: `/tmp/opencode/kareelio-runtime-harden-baseline`.
+- Branche: `chore/harden-runtime-containers`, tracking `origin/chore/harden-runtime-containers`, propre au moment de l’analyse locale après le commit `fb8badc fix(hardening): align runtime hardening and ci`.
+- PR: #54 (`fix(hardening): align runtime hardening and ci`) ouverte contre `main`.
+- Checks GitHub observés:
+  - `Frontend`: failed.
+  - `CodeQL`: failed via review/annotations GitHub Advanced Security.
+  - `Analyze (go)`, `Analyze (javascript-typescript)`, `Backend`, `Build Backend`, `Build Frontend`: passed.
+- Alertes CodeQL confirmées dans `frontend/server.go`:
+  - `frontend/server.go:94`: `os.Stat(fsPath)` dépend d’un chemin dérivé de `r.URL.Path`.
+  - `frontend/server.go:115`: `http.ServeFile(..., filePath)` reçoit ce chemin dérivé.
+  - Type: `Uncontrolled data used in path expression`.
+- Échec CI frontend confirmé dans les logs PR:
+  - `npm audit --audit-level=high` signale `nanoid <3.3.17` high severity (`GHSA-2v37-7h3g-55p8`).
+  - Le lockfile courant contient `nanoid@3.3.16` sous `frontend/package-lock.json`.
+  - `nanoid` est transitive via `postcss@8.5.23` (`postcss` déclare `nanoid: ^3.3.16`).
+- État local après relecture:
+  - `npm audit --json` confirme `nanoid` high, plus les advisories moderate React Router déjà documentées.
+  - `npm ls nanoid` montre `postcss@8.5.23 -> nanoid@3.3.16`.
+- Les changements de hardening précédents restent attendus et validés: backend/frontend runtime `scratch`, frontend Go static/proxy server, Compose hardening, K8s frontend port 8080 + CiliumNetworkPolicy, workflow Docker permissions réduites.
 
 ## Tasks
 
-- [x] Bound the async admin notification lookup.
-  - Update `sendAdminNewRegistrationEmailAsync` / `sendAdminNewRegistrationEmail` so the background active-admin lookup uses a bounded context (recommended small constant timeout, e.g. 5 seconds) and always calls `cancel()`.
-  - Preserve the current behavior: registration response remains non-blocking; timeout/admin lookup errors only produce safe logs and skip admin notification email.
-  - Add or adjust a focused handler test so a fake admin lookup can assert that it receives a context with a deadline.
-  - Do not change frontend code or dependency files in this step.
-  - Findings: `sendAdminNewRegistrationEmailAsync` now creates a 5s timeout context, defers `cancel()` in the goroutine, and passes the bounded context into the active-admin lookup. Added a focused handler test that asserts the lookup receives a deadline and that the async path cancels the context after completion. Verified with `go test ./internal/handler ./internal/mailer ./internal/repository`, `go test ./...`, and `go build ./...`.
+- [x] Corriger les alertes CodeQL de path traversal dans `frontend/server.go`.
+  - Modifier uniquement `frontend/server.go` sauf nécessité de tests/formatage.
+  - Supprimer le flux direct `r.URL.Path -> filepath.Join(distDir, ...) -> os.Stat/http.ServeFile`.
+  - Implémenter une résolution sûre des assets statiques, par exemple:
+    - traiter `/` et les routes SPA sans extension via un chemin constant prévalidé `index.html`;
+    - rejeter explicitement les chemins contenant un segment caché (`/.env`, `/.git`, etc.) afin de conserver l’intention de l’ancien bloc Nginx `location ~ /\.`;
+    - servir uniquement les fichiers asset connus par extension via un mécanisme qui contraint la lecture à `distDir` (`http.FileServer(http.Dir(distDir))`, `fs.ValidPath`/`http.FS(os.DirFS(distDir))`, ou équivalent sûr);
+    - éviter `http.ServeFile` avec un chemin assemblé depuis une entrée utilisateur.
+  - Préserver le comportement existant: SPA fallback, `/healthz`, `/readyz`, `/api/` reverse proxy, cache immutable pour assets, `no-store` pour `index.html`, headers sécurité.
+  - Validation ciblée:
+    - `docker build -t kareelio-frontend-hardened ./frontend`.
+    - Démarrer le frontend avec backend/compose ou image locale et vérifier `/`, `/healthz`, `/readyz`, `/api/healthz`, un asset `/assets/...`, et un chemin caché type `/.env` qui doit répondre 404.
+    - `git diff --check`.
+  - Validation GitHub attendue après push: l’annotation CodeQL PR #54 doit disparaître.
+  - Findings: `frontend/server.go` ne transmet plus un chemin dérivé de `r.URL.Path` à `os.Stat`/`http.ServeFile`; les assets sont servis via `http.FileServer(http.Dir(distDir))`, les chemins cachés sont rejetés explicitement, et `index.html` reste servi depuis un chemin constant. Vérifié avec `docker build -t kareelio-frontend-hardened ./frontend`, `docker compose up -d --build postgres backend frontend`, smoke tests sur `/`, `/healthz`, `/readyz`, `/api/healthz`, `/assets/index-DCDKC_dC.js`, `/.env`, `/.git/config`, puis `docker compose down`; `git diff --check` est propre.
 
-- [x] Add invalid admin email skip coverage.
-  - Add a targeted test for an invalid, non-local active admin email (for example `not-an-email`) that confirms the mailer is not called and `reason=invalid_admin_email` is logged.
-  - Confirm logs do not include verification tokens, passwords, session IDs, SMTP credentials, or raw request bodies.
-  - Keep this as backend test coverage only unless implementation discovers a compile requirement.
-  - Findings: added `TestSendAdminNewRegistrationEmailSkipsInvalidAdminEmail` in `backend/internal/handler/admin_notification_email_test.go`; it confirms the mailer is skipped and the safe invalid-email reason is logged. Verified with `go test ./internal/handler ./internal/mailer ./internal/repository`, `go test ./...`, and `go build ./...`.
+- [x] Corriger la vulnérabilité high `nanoid <3.3.17` sans migration majeure.
+  - Dans `frontend/`, exécuter une correction non breaking (`npm audit fix` ou mise à jour lockfile équivalente) pour remonter `nanoid` à `3.3.17+`.
+  - Ne pas utiliser `npm audit fix --force` sans décision explicite; ne pas migrer React Router v7 dans cette tâche.
+  - Inspecter le diff de `frontend/package-lock.json` pour vérifier que le changement reste limité à `nanoid`/lockfile et ne modifie pas les dépendances runtime majeures.
+  - Validation:
+    - `cd frontend && npm audit --audit-level=high`.
+    - `cd frontend && npm run lint`.
+    - `cd frontend && npm run build`.
+    - `cd frontend && npm run test`.
+  - Documenter les advisories moderate React Router restantes comme follow-up si elles persistent.
+  - Findings: `npm audit fix` a remonté `nanoid` en `3.3.18` dans `frontend/package-lock.json` sans migration React Router. Vérifié avec `cd frontend && npm audit --audit-level=high` (qui passe toujours), `npm run lint`, `npm run build`, `npm run test`, et `git diff --check`; le diff lockfile reste limité à `nanoid`.
 
-- [x] Triage the React Router audit finding safely.
-  - Run `cd frontend && npm audit --audit-level=high` and `cd frontend && npm audit` to confirm severity and affected versions.
-  - If only moderate React Router advisories remain and the available fix is still a breaking v7 upgrade, document the risk/decision in `PLAN.md` and PR notes rather than bundling a major router migration into this feature PR.
-  - If the audit result changes to high/critical or a non-breaking patched v6 is available, stop and update the plan before implementation.
-  - Findings: both `npm audit --audit-level=high` and `npm audit` still report two moderate React Router advisories for `react-router`/`react-router-dom` 6.30.4. The only suggested fix is `react-router-dom@7.18.2` via `npm audit fix --force`, which is a breaking major upgrade. Decision: defer the router upgrade to a separate dependency/security PR instead of bundling it into this review follow-up.
+- [x] Revalider la PR #54 après les corrections sécurité.
+  - `git diff --check`.
+  - `make lint`.
+  - `make build`.
+  - `make test` si l’environnement dispose du compilateur C requis pour `go test -race`; sinon documenter le blocage et exécuter `cd backend && go test ./...` plus `cd frontend && npm run test`.
+  - `docker compose config`.
+  - `docker compose up -d --build postgres backend frontend`, puis smoke tests:
+    - frontend `/`, `/healthz`, `/readyz`;
+    - frontend proxy `/api/healthz`;
+    - backend `/api/healthz`, `/api/readyz`;
+    - asset statique sous `/assets/...`;
+    - chemin caché `/.env` ou `/.git/config` attendu en 404.
+  - Vérifier que les images backend/frontend restent sans shell: `docker run --rm --entrypoint /bin/sh <image>` doit échouer.
+  - Nettoyer les containers de validation avec `docker compose down`.
+  - Findings: `git diff --check`, `make lint`, `make build`, `cd backend && go test ./...`, `cd frontend && npm run test`, `docker compose config`, `docker compose up -d --build postgres backend frontend`, smoke tests frontend `/`, `/healthz`, `/readyz`, `/api/healthz`, `/assets/index-DCDKC_dC.js`, `/.env`, `/.git/config`, backend `/api/healthz`, `/api/readyz`, and both shell-absence checks all passed. `make test` remains blocked in this environment because `go test -race` needs `CGO_ENABLED=1` and a C compiler (`aarch64-linux-gnu-gcc`) that are not installed here. `npm audit --audit-level=high` still passes; the remaining frontend advisories are the documented moderate React Router follow-up.
 
-- [x] Final validation and PR hygiene.
-  - Run backend targeted validation and full build/tests after backend changes.
-  - Run frontend audit validation if the dependency advisory is triaged/documented.
-  - Update `PLAN.md` findings for each completed review item.
-  - Update PR #47 description or comment with the review follow-up summary if requested by the user; do not push/create additional commits unless explicitly requested by `/commit` or PR update workflow.
-  - Findings: reran `go test ./internal/handler ./internal/mailer ./internal/repository`, `go test ./...`, `go build ./...`, `npm audit --audit-level=high`, and `npm audit`. Backend tests/build passed, and the frontend audit still reports the same two moderate `react-router` advisories with only a breaking `react-router-dom@7.18.2` fix available, matching the documented decision to defer the dependency upgrade to a separate PR. PR note/comment update was not performed because it was not requested in this turn.
+- [ ] Mettre à jour la PR #54 après validation.
+  - Committer les corrections en Conventional Commit, par exemple `fix(frontend): constrain static file serving` ou `fix(hardening): address frontend security checks` selon le diff final.
+  - Pousser uniquement la branche `chore/harden-runtime-containers`.
+  - Vérifier les checks PR #54:
+    - `Frontend` doit passer;
+    - `CodeQL` / GitHub Advanced Security ne doit plus afficher les deux alertes path expression;
+    - les jobs Docker PR doivent rester verts.
+  - Mettre à jour la description/commentaire PR avec les validations et les éventuels blocages locaux (`kubectl`, `make test -race`) si nécessaire.
 
 ## Validation
 
-- Backend validation for review fixes:
-  - `cd backend && go test ./internal/handler ./internal/mailer ./internal/repository`.
-  - `cd backend && go test ./...`.
-  - `cd backend && go build ./...`.
-- Frontend/dependency advisory validation:
-  - `cd frontend && npm ci` if dependencies are not installed in the worktree.
+- CodeQL/path traversal:
+  - Revue du diff `frontend/server.go` pour confirmer qu’aucun chemin fichier n’est construit naïvement depuis `r.URL.Path`.
+  - Validation PR GitHub Advanced Security après push.
+- Frontend dependency/security:
   - `cd frontend && npm audit --audit-level=high`.
-  - `cd frontend && npm audit` to capture/document remaining moderate React Router advisory details.
-  - If frontend source or package files are changed unexpectedly: `cd frontend && npm run lint`, `cd frontend && npx vitest run src/components/Navbar.test.tsx`, and `cd frontend && npm run build`.
-- Security/log validation:
-  - Confirm admin lookup timeout/invalid-email skip logs use safe reason fields only.
-  - Confirm no token/password/session/SMTP secret/raw-body leakage is introduced.
-- Infra validation if manifests unexpectedly change:
-  - `kubectl apply --dry-run=server -f deploy/k8s/`.
-  - `kubectl diff -f deploy/k8s/`.
-  - Docker/Kubernetes changes should include rollout impact and rollback before implementation proceeds.
+  - `cd frontend && npm run lint`.
+  - `cd frontend && npm run build`.
+  - `cd frontend && npm run test`.
+- Runtime/Compose regression:
+  - `docker build -t kareelio-frontend-hardened ./frontend`.
+  - `docker compose config`.
+  - `docker compose up -d --build postgres backend frontend` + smoke tests HTTP.
+  - No-shell checks backend/frontend.
+- Broader validation:
+  - `make lint`.
+  - `make build`.
+  - `make test` where supported; fallback documented if `go test -race` lacks a C compiler.
+- GitHub Actions:
+  - PR #54 checks after push (`gh pr checks 54`).
+  - Revue: pas de `pull_request_target`, pas de secrets sur PR, publish GHCR seulement sur événements de confiance.
 
 ## Risks
 
-- Too-short admin lookup timeout could skip admin emails during transient DB pressure; registration must remain successful and logs should make the skip diagnosable.
-- Too-long timeout could still accumulate background goroutines under DB stalls; keep the bound modest.
-- Additional logging/tests could accidentally include email addresses or sensitive values; keep skip/error logs minimal and avoid raw payloads.
-- Bundling a React Router v7 migration into this feature PR could introduce routing/auth regressions; prefer a dedicated dependency/security PR unless explicitly approved.
-- Leaving moderate dependency advisories unresolved creates residual risk; document the decision and follow-up clearly.
+- Une correction trop permissive du serveur statique peut laisser une traversal (`..`, chemins absolus, symlinks, fichiers cachés) ou casser le fallback SPA.
+- Remplacer trop largement la logique static/proxy peut introduire une régression de cache headers, CSP/security headers, health probes, ou proxy `/api/`.
+- `npm audit fix` peut modifier plus que `nanoid`; le diff lockfile doit être inspecté avant commit.
+- Les advisories React Router moderate restent un risque résiduel si elles sont acceptées temporairement; ne pas les masquer dans ce correctif.
+- CodeQL peut encore alerter si le code conserve un flux utilisateur vers `os.Stat`, `os.Open` ou `http.ServeFile` même après sanitation apparente.
+- Les validations `kubectl` restent non disponibles localement; ne pas déployer en production sans validation cluster-side.
 
 ## Rollback
 
-- Backend review-fix rollback: revert the follow-up commit or restore the previous `admin_notification_email.go` behavior; the original feature remains usable.
-- Test-only rollback: revert the added test changes if they are flaky or incorrectly specified.
-- React Router advisory handling rollback:
-  - If only documentation is changed, revert the plan/PR note.
-  - If a dependency upgrade is explicitly approved and later causes issues, revert `frontend/package.json` and `frontend/package-lock.json` and redeploy the previous frontend image.
-- No DB migration rollback is expected for these review fixes. The existing feature rollback remains: previous app images can ignore `admin_notification_state`, or the down migration can drop only that table if notification state is disposable.
-- Kubernetes rollback if manifests unexpectedly change: reapply previous manifests and redeploy with `make deploy VERSION=<previous>`.
+- Serveur frontend: revert du commit de correction `frontend/server.go` pour revenir au comportement précédent de la PR #54 si le frontend/proxy régresse.
+- Dépendances frontend: revert de `frontend/package-lock.json` si le lockfile cause une régression inattendue; cela réouvrira le blocage audit high et devra être remplacé par une autre correction.
+- Runtime hardening global: revert de la PR #54 complète et redeploy du dernier tag connu bon via `make deploy VERSION=<previous-version>` si un problème production est découvert après merge.
+- Docker/Compose validation: `docker compose down` pour nettoyer l’environnement local après tests.
+- Aucun rollback DB prévu; aucune migration ou changement de données n’est dans le périmètre.
 
 ## Notes / Decisions
 
-- Decision: address backend reliability/test coverage in small backend-only steps first.
-- Decision: treat the React Router finding as dependency/security follow-up unless the user explicitly approves a breaking v7 migration in this PR.
-- Decision: keep admin notification email delivery asynchronous and best-effort.
-- Assumption: the review findings listed above are the current scope of “améliorations suite au retour de la review”.
-- Assumption: PR #47 remains the target PR for these follow-up changes.
-- Unresolved: whether the React Router moderate advisories should be accepted temporarily with a tracked follow-up, or fixed immediately in a separate dependency PR.
-- No further `/next` task remains for `platform-build`; the review follow-up plan is complete.
+- Decision: corriger d’abord CodeQL dans `frontend/server.go` car il s’agit d’un commentaire bloquant GitHub Advanced Security sur du code nouvellement ajouté.
+- Decision: corriger `nanoid` via lockfile/audit non breaking; ne pas utiliser `npm audit fix --force`.
+- Decision: maintenir React Router v7 comme follow-up séparé tant que les advisories restent moderate et que le fix est breaking.
+- Assumption: le serveur frontend doit continuer à tourner en image `scratch` sans shell; la solution ne doit pas revenir à Nginx dans ce correctif.
+- Assumption: les assets Vite restent servis sous `/assets/` avec extensions connues; les routes sans extension doivent fallback vers `index.html`.
+- Unresolved: CodeQL peut nécessiter une validation GitHub après push pour confirmer que les alertes path expression sont closes.
+- First `/next` task for `platform-build`: update only `frontend/server.go` to eliminate the CodeQL path-expression flow by constraining static file serving to `distDir` without passing user-derived filesystem paths to `os.Stat`/`http.ServeFile`; preserve SPA fallback, `/api/` proxy, health/readiness endpoints, security/cache headers, and hidden-file denial; verify with `docker build -t kareelio-frontend-hardened ./frontend`, local frontend/compose smoke tests including `/.env` returning 404, and `git diff --check`; do not change dependencies or workflows in this step.
