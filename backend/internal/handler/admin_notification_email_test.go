@@ -166,6 +166,12 @@ func TestSendAdminNewRegistrationEmailAsyncUsesTimeoutContext(t *testing.T) {
 		t.Fatal("async admin notification did not finish")
 	}
 
+	select {
+	case <-repo.ctx.Done():
+	case <-time.After(time.Second):
+		t.Fatal("async admin notification context was not canceled")
+	}
+
 	if err := repo.ctx.Err(); err != context.Canceled {
 		t.Fatalf("expected context to be canceled, got %v", err)
 	}
