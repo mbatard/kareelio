@@ -1,9 +1,7 @@
-# Kareelio binary (opencode launcher)
-kareelio
-
-# Local helper scripts
-/opencode
-/run
+# Local scripts
+docker-compose-up.sh
+sbx-exec.sh
+sbx-run.sh
 
 # Go
 backend/tmp/
