@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Refreshed the root npm lockfile to patched dependency releases for the release toolchain.
 - Updated vulnerable frontend runtime and build dependencies and the Go router dependency to patched releases.
 - Verification emails are now sent in the user's selected language instead of using a bilingual body and sender-derived subject language.
 - Public registration and public verification resend now queue email delivery asynchronously so SMTP latency does not delay user-facing success responses.
